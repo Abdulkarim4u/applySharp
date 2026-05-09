@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #fafaf7;
+  --color-fg: #0f172a;
+  --color-muted: #64748b;
+  --color-muted-soft: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-brand: #064e3b;
+  --color-brand-hover: #0a6e57;
+  --color-brand-soft: #ecfdf5;
+  --color-accent: #b45309;
+  --color-danger: #b91c1c;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --radius-sm: 0.375rem;
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle focus ring */
+*:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Long-form prose for the generated statement */
+.prose-statement {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--color-fg);
+  white-space: pre-wrap;
+}
+
+.prose-statement p {
+  margin-bottom: 1.1em;
+}
+
+.prose-statement h2,
+.prose-statement h3 {
+  font-weight: 600;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+  color: var(--color-fg);
 }
