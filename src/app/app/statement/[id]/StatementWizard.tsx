@@ -288,7 +288,7 @@ const GENERATION_STAGES = [
   "Reading the person specification…",
   "Mapping each essential criterion to your experience…",
   "Drafting your opening paragraph…",
-  "Weaving your STAR stories into the narrative…",
+  "Weaving your personal examples into the narrative…",
   "Threading NHS values through your actions…",
   "Polishing British English and sentence rhythm…",
   "Final review pass…",
@@ -307,7 +307,7 @@ const GAP_STAGES = [
   "Reading your CV…",
   "Comparing your experience to each criterion…",
   "Spotting where the evidence is thin…",
-  "Drafting focused STAR questions…",
+  "Drafting focused questions…",
   "Personalising hints from your CV…",
   "Almost done…",
 ];
@@ -1092,7 +1092,7 @@ function GapFillStep({
           >
             <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
               <span>
-                Advanced: add STAR stories first
+                Advanced: add personal examples first
                 <span className="text-[var(--color-muted)] font-normal ml-1">
                   (slower, more personalised)
                 </span>

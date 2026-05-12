@@ -63,8 +63,9 @@ export default function LandingPage() {
                 Three steps. About ten minutes.
               </h2>
               <p className="mt-4 text-[var(--color-muted)] text-lg">
-                Built around the STARR method NHS shortlisters score against,
-                not a one-size-fits-all template.
+                Built around the way NHS shortlisters actually score: every
+                essential criterion answered with a specific example, not a
+                one-size-fits-all template.
               </p>
             </div>
 
@@ -82,7 +83,7 @@ export default function LandingPage() {
               <Step
                 n="3"
                 title="Get your statement"
-                body="A STARR-structured statement that weaves NHS values through your actual actions. British English, written in your voice, ready to paste into Trac, NHS Jobs or JobTrain."
+                body="A structured statement, one specific example per criterion, weaving NHS values through your actual actions. British English, written in your voice, ready to paste into Trac, NHS Jobs or JobTrain."
               />
             </div>
           </div>
@@ -107,7 +108,7 @@ export default function LandingPage() {
               <Feature
                 icon={<FileText />}
                 title="Every criterion answered"
-                body="Each essential criterion gets its own STARR mini-story. Nothing left unanswered, no padding."
+                body="Each essential criterion gets its own specific example. Nothing left unanswered, no padding."
               />
               <Feature
                 icon={<Sparkles />}
