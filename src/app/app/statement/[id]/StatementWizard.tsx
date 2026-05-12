@@ -148,7 +148,7 @@ export function StatementWizard({ initial }: { initial: StatementRecord }) {
       <p className="mt-1 text-sm text-[var(--color-muted)]">
         Step {step + 1} of {STEPS.length}
         <span className="hidden sm:inline">
-          {" · About 10 minutes total · Progress saves automatically"}
+          {" · Progress saves automatically"}
         </span>
       </p>
 
@@ -1072,16 +1072,14 @@ function GapFillStep({
         </div>
       ) : (
         <>
-          <div className="rounded-lg border border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-4 sm:p-5 mb-4">
-            <Button onClick={onContinue} size="lg" className="w-full sm:w-auto">
-              <Sparkles className="h-4 w-4" />
-              Skip and generate now
-            </Button>
-            <p className="text-sm text-[var(--color-brand)] mt-3 leading-relaxed">
-              Quickest path. The AI writes from your CV, then asks for any
-              specifics that need real-world detail after scoring.
-            </p>
-          </div>
+          <p className="text-sm text-[var(--color-muted)] mb-4 leading-relaxed">
+            The AI will write from your CV and ask you a few one-line
+            questions after scoring. Tap{" "}
+            <span className="font-medium text-[var(--color-fg)]">
+              Generate from my CV
+            </span>{" "}
+            below to start.
+          </p>
 
           <details
             className="rounded-md border border-[var(--color-border)] bg-white group"
@@ -1089,9 +1087,9 @@ function GapFillStep({
           >
             <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
               <span>
-                Add personal stories first
+                Advanced: add STAR stories first
                 <span className="text-[var(--color-muted)] font-normal ml-1">
-                  (~10 min)
+                  (slower, more personalised)
                 </span>
               </span>
               <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />

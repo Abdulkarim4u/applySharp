@@ -9,7 +9,7 @@ export const STEPS: StepDef[] = [
   { label: "Advert" },
   { label: "Criteria" },
   { label: "CV" },
-  { label: "Gaps" },
+  { label: "Stories" },
   { label: "Generate" },
 ];
 
