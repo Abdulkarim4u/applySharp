@@ -640,8 +640,8 @@ function JobAdvertStep({
       ) : (
         <p className="mt-2 text-xs text-[var(--color-muted-soft)]">
           {wc === 0
-            ? "Tip: copy from the Trac, NHS Jobs or JobTrain advert page — include the person specification section"
-            : `${wc.toLocaleString("en-GB")} words · ${ok ? "Ready" : "Paste a bit more — we need the person spec section"}`}
+            ? "Paste from Trac, NHS Jobs or JobTrain. Include the person spec."
+            : `${wc.toLocaleString("en-GB")} words · ${ok ? "Ready" : "Add the person spec section too"}`}
         </p>
       )}
     </StepShell>
@@ -1000,7 +1000,7 @@ function CvStep({
         <p className="mt-2 text-xs text-[var(--color-muted-soft)]">
           {wc === 0
             ? "PDF or copy-paste both work. We never share your CV."
-            : `${wc.toLocaleString("en-GB")} words · ${ok ? "Ready" : "Add a bit more — work history and key responsibilities"}`}
+            : `${wc.toLocaleString("en-GB")} words · ${ok ? "Ready" : "Add your work history and key responsibilities"}`}
         </p>
       )}
     </StepShell>
@@ -1319,7 +1319,7 @@ function GenerateStep({
       if (!res.ok || !data) {
         if (res.status === 504 || res.status === 408) {
           throw new Error(
-            "Scoring took too long and timed out. Try again — it usually works on the second attempt.",
+            "Scoring took too long and timed out. Try again. It usually works on the second attempt.",
           );
         }
         if (res.status >= 500) {
@@ -1696,8 +1696,8 @@ function GenerateStep({
             </h2>
             <p className="mt-1.5 text-[var(--color-muted)]">
               {hasOutput
-                ? "Edit freely. This is your statement now. Use the regenerate button to try a fresh version."
-                : "Choose your format and click generate. We'll stream it as it writes."}
+                ? "Edit anything. Score it when you're ready."
+                : "Choose a format and generate."}
             </p>
           </div>
           {hasOutput && !streaming && (
@@ -1831,7 +1831,7 @@ function GenerateStep({
                 </span>
                 <span className="block text-xs text-[var(--color-muted)] mt-0.5">
                   {criteriaCount >= 8
-                    ? "Recommended — easier for shortlisters to scan when there are many criteria."
+                    ? "Recommended. Easier for shortlisters to scan when there are many criteria."
                     : "Better for short statements with few criteria."}
                 </span>
               </span>
@@ -1842,8 +1842,7 @@ function GenerateStep({
                 <Sparkles className="h-4 w-4" /> Generate my statement
               </Button>
               <p className="mt-2 text-xs text-[var(--color-muted-soft)]">
-                Usually takes 15–30 seconds. You can edit, regenerate or score
-                with a shortlister afterwards.
+                Takes 15-30 seconds.
               </p>
             </div>
           </div>
