@@ -79,6 +79,8 @@ export interface StatementRecord {
   final_text: string | null;
   status: StatementStatus;
   step: number;
+  last_score: number | null;
+  last_decision: ShortlistDecision | null;
   created_at: string;
   updated_at: string;
 }

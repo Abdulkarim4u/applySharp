@@ -23,9 +23,16 @@ create table if not exists public.statements (
   final_text text,
   status text not null default 'draft' check (status in ('draft', 'in_progress', 'completed')),
   step int not null default 0,
+  last_score int,
+  last_decision text check (last_decision in ('shortlist', 'borderline', 'reject')),
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
+
+-- Backfill for existing deployments (idempotent).
+alter table public.statements add column if not exists last_score int;
+alter table public.statements add column if not exists last_decision text
+  check (last_decision in ('shortlist', 'borderline', 'reject'));
 
 create index if not exists statements_user_id_idx on public.statements(user_id);
 create index if not exists statements_updated_at_idx on public.statements(updated_at desc);

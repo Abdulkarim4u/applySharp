@@ -32,6 +32,8 @@ const PatchBody = z.object({
   final_text: z.string().nullable().optional(),
   status: z.enum(["draft", "in_progress", "completed"]).optional(),
   step: z.number().int().min(0).max(10).optional(),
+  last_score: z.number().int().min(0).max(100).nullable().optional(),
+  last_decision: z.enum(["shortlist", "borderline", "reject"]).nullable().optional(),
 });
 
 export async function PATCH(

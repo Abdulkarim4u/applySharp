@@ -52,6 +52,8 @@ type Updates = Partial<
     | "final_text"
     | "status"
     | "step"
+    | "last_score"
+    | "last_decision"
   >
 >;
 
@@ -269,6 +271,9 @@ export function StatementWizard({ initial }: { initial: StatementRecord }) {
           statement={s}
           onTextUpdate={(text) =>
             persist({ final_text: text, status: "completed" })
+          }
+          onScoreUpdate={(score, decision) =>
+            persist({ last_score: score, last_decision: decision })
           }
           onBack={() => setStep(3)}
         />
@@ -1180,10 +1185,12 @@ function GapFillStep({
 function GenerateStep({
   statement,
   onTextUpdate,
+  onScoreUpdate,
   onBack,
 }: {
   statement: StatementRecord;
   onTextUpdate: (text: string) => void;
+  onScoreUpdate: (score: number, decision: ShortlistDecision) => void;
   onBack: () => void;
 }) {
   const criteriaCount = statement.person_spec?.criteria.length ?? 0;
@@ -1332,7 +1339,10 @@ function GenerateStep({
         throw new Error((data && data.error) || `Scoring failed (${res.status})`);
       }
       if (!data.review) throw new Error("No review returned from server");
-      setReview(data.review as ReviewResult);
+      const fresh = data.review as ReviewResult;
+      setReview(fresh);
+      // Persist the score so the home page can show it on the card.
+      onScoreUpdate(fresh.overallScore, fresh.shortlistDecision);
     } catch (e) {
       console.error("review failed", e);
       setReviewError(e instanceof Error ? e.message : "Scoring failed");
@@ -1641,6 +1651,8 @@ function GenerateStep({
       if (bestText !== statement.final_text) {
         onTextUpdate(bestText);
       }
+      // Persist the final (best) score so the home page reflects it.
+      onScoreUpdate(bestReview.overallScore, bestReview.shortlistDecision);
 
       // Tell the user what happened when score didn't budge — otherwise
       // it looks like the loop did nothing.
