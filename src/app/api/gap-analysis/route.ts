@@ -45,12 +45,31 @@ export async function POST(req: NextRequest) {
     const result = await callClaudeJson<{ questions: GapFillQuestion[] }>({
       system: GAP_ANALYSIS_SYSTEM,
       user: buildGapAnalysisUser(JSON.stringify(body.personSpec, null, 2), body.cv),
-      maxTokens: 3072,
+      maxTokens: 4096,
     });
 
-    return NextResponse.json({ questions: result.questions ?? [] });
+    // Strip em-dashes / en-dashes from the AI-drafted skeletons. The system
+    // prompt forbids them but Claude still emits them inside [bracketed
+    // prompts], and the user sees those drafts verbatim.
+    const questions = (result.questions ?? []).map((q) => ({
+      ...q,
+      draftAnswer: q.draftAnswer ? sanitiseDraft(q.draftAnswer) : q.draftAnswer,
+      hint: sanitiseDraft(q.hint ?? ""),
+      question: sanitiseDraft(q.question ?? ""),
+    }));
+
+    return NextResponse.json({ questions });
   } catch (e) {
     console.error("gap-analysis failed", e);
     return serverError(e instanceof Error ? e.message : "Analysis failed");
   }
+}
+
+function sanitiseDraft(s: string): string {
+  return s
+    .replace(/\s*—\s*/g, ", ")
+    .replace(/\s*–\s*/g, ", ")
+    .replace(/\s--\s/g, ", ")
+    .replace(/,\s*,/g, ",")
+    .replace(/[ \t]{2,}/g, " ");
 }

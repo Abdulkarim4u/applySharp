@@ -42,15 +42,28 @@ export async function POST(req: NextRequest) {
         band: body.personSpec.band,
         organisation: body.personSpec.organisation,
       }),
-      maxTokens: 4096,
-      // Low temperature for consistent scoring — re-running review on the same
-      // text should give the same score within a couple of points.
+      // Person specs with 10+ essential criteria + 5 topFixes can produce
+      // 3.5k+ tokens of JSON. 4096 was hitting max_tokens cutoffs which
+      // surfaced as "Review failed" to the user.
+      maxTokens: 8192,
       temperature: 0.3,
     });
+
+    if (
+      !review ||
+      typeof review.overallScore !== "number" ||
+      !Array.isArray(review.criterionScores)
+    ) {
+      console.error("review-statement: malformed review shape", review);
+      return serverError(
+        "The shortlister response was malformed. Please try again.",
+      );
+    }
 
     return NextResponse.json({ review });
   } catch (e) {
     console.error("review-statement failed", e);
-    return serverError(e instanceof Error ? e.message : "Review failed");
+    const msg = e instanceof Error ? e.message : "Review failed";
+    return serverError(msg);
   }
 }

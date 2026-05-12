@@ -1314,11 +1314,27 @@ function GenerateStep({
           statementText: text,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Review failed");
+      // 504 / HTML error pages don't return JSON; build a sensible message.
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        if (res.status === 504 || res.status === 408) {
+          throw new Error(
+            "Scoring took too long and timed out. Try again — it usually works on the second attempt.",
+          );
+        }
+        if (res.status >= 500) {
+          throw new Error(
+            (data && data.error) ||
+              `Scoring failed (${res.status}). Try again in a moment.`,
+          );
+        }
+        throw new Error((data && data.error) || `Scoring failed (${res.status})`);
+      }
+      if (!data.review) throw new Error("No review returned from server");
       setReview(data.review as ReviewResult);
     } catch (e) {
-      setReviewError(e instanceof Error ? e.message : "Review failed");
+      console.error("review failed", e);
+      setReviewError(e instanceof Error ? e.message : "Scoring failed");
     } finally {
       setReviewing(false);
     }
@@ -1942,9 +1958,20 @@ function GenerateStep({
       )}
 
       {reviewError && (
-        <div className="mt-4 flex items-start gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <span>{reviewError}</span>
+        <div className="mt-4 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span className="flex-1 break-words">{reviewError}</span>
+          </div>
+          <div className="mt-2 pl-6">
+            <button
+              type="button"
+              onClick={runReview}
+              className="text-xs font-medium underline underline-offset-2 hover:no-underline"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       )}
 
