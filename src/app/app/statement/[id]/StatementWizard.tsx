@@ -22,7 +22,6 @@ import {
   Pencil,
   Upload,
   Gauge,
-  ThumbsUp,
   ThumbsDown,
   AlertTriangle,
   Download,
@@ -1215,6 +1214,9 @@ function GenerateStep({
   const [improveStage, setImproveStage] = useState<string>("");
   const [scoreHistory, setScoreHistory] = useState<number[]>([]);
   const [improveError, setImproveError] = useState<string | null>(null);
+  // User's answers to the inline one-line questions on each fix. Keyed by
+  // fix index in review.topFixes. Empty = skipped.
+  const [userAnswers, setUserAnswers] = useState<Record<number, string>>({});
 
   const [justSaved, setJustSaved] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
@@ -1302,9 +1304,10 @@ function GenerateStep({
     setReviewStartedAt(Date.now());
     setReviewError(null);
     setReview(null);
-    // Fresh review = fresh history. Otherwise the previous run's history
-    // lingers and the "+N improvement" badge points at a stale baseline.
+    // Fresh review = fresh history + fresh user answers. The new fix list
+    // is different, so old answers no longer map by index.
     setScoreHistory([]);
+    setUserAnswers({});
     try {
       const res = await fetch("/api/review-statement", {
         method: "POST",
@@ -1549,7 +1552,18 @@ function GenerateStep({
           stopReason = "target";
           break;
         }
-        const fixes = currentReview.topFixes;
+        // Build the fix payload. For user-input fixes, attach the user's
+        // typed answer (if any) so the improve prompt can weave it in
+        // verbatim. Only the FIRST round uses user answers — subsequent
+        // rounds polish what the AI produced.
+        const fixes = currentReview.topFixes.map((fix, idx) => {
+          const base = { title: fix.title, suggestion: fix.suggestion };
+          if (i === 0 && fix.requiresUserInput) {
+            const answer = userAnswers[idx]?.trim();
+            if (answer) return { ...base, userInput: answer };
+          }
+          return base;
+        });
         if (fixes.length === 0) {
           stopReason = "no-fixes";
           break;
@@ -1990,6 +2004,8 @@ function GenerateStep({
           scoreHistory={scoreHistory}
           onAutoImprove={autoImprove}
           improving={improving}
+          userAnswers={userAnswers}
+          onUserAnswerChange={setUserAnswers}
         />
       )}
     </section>
@@ -2047,30 +2063,28 @@ function ReviewCard({
   scoreHistory,
   onAutoImprove,
   improving,
+  userAnswers,
+  onUserAnswerChange,
 }: {
   review: ReviewResult;
   scoreHistory: number[];
   onAutoImprove: () => void;
   improving: boolean;
+  userAnswers: Record<number, string>;
+  onUserAnswerChange: (next: Record<number, string>) => void;
 }) {
   const decisionStyle = decisionStyles[review.shortlistDecision];
   const previousScore = scoreHistory.length >= 2 ? scoreHistory[0] : null;
   const scoreImproved =
     previousScore !== null && review.overallScore > previousScore;
   const fixCount = review.topFixes.length;
-  // Once auto-improve has run (scoreHistory has more than just the initial
-  // entry), don't offer it again on the same review — the loop already
-  // tried and stopped. The user needs to manually edit or re-score before
-  // a fresh attempt makes sense.
   const hasRunAutoImprove = scoreHistory.length > 1;
   const canAutoImprove =
     review.overallScore < 95 && fixCount > 0 && !improving && !hasRunAutoImprove;
 
-  const lowScoring = review.criterionScores.filter((c) => c.score < 2);
-  const highScoring = review.criterionScores.filter((c) => c.score >= 2);
-
   return (
     <div className="mt-6 space-y-4">
+      {/* Score card */}
       <div
         className={cn(
           "rounded-lg border p-4 sm:p-5",
@@ -2114,100 +2128,89 @@ function ReviewCard({
             </p>
           </div>
         </div>
-
-        {canAutoImprove && (
-          <Button
-            onClick={onAutoImprove}
-            disabled={improving}
-            className="w-full mt-4"
-            size="lg"
-          >
-            <Wand2 className="h-4 w-4" />
-            Auto-improve
-          </Button>
-        )}
       </div>
 
-      {(review.strengths.length > 0 || review.weaknesses.length > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {review.strengths.length > 0 && (
-            <ReviewList
-              icon={<ThumbsUp className="h-4 w-4" />}
-              title="Strengths"
-              items={review.strengths}
-              accentClass="text-[var(--color-brand)] bg-[var(--color-brand-soft)]"
-            />
-          )}
-          {review.weaknesses.length > 0 && (
-            <ReviewList
-              icon={<ThumbsDown className="h-4 w-4" />}
-              title="Gaps"
-              items={review.weaknesses}
-              accentClass="text-amber-800 bg-amber-50"
-            />
+      {/* The single fixes card. Always 3 entries. AI-applicable fixes are
+          tagged "AI will fix" — no work for the user. User-input fixes show
+          a single small input below the title. Tap Auto-improve to apply
+          everything in one shot. */}
+      {fixCount > 0 && !hasRunAutoImprove && (
+        <div className="rounded-lg border border-[var(--color-border)] bg-white">
+          <div className="p-4 border-b border-[var(--color-border)]">
+            <h3 className="font-semibold text-sm">
+              {fixCount} {fixCount === 1 ? "fix" : "fixes"} to reach a higher score
+            </h3>
+            <p className="text-xs text-[var(--color-muted)] mt-0.5">
+              Answer any quick questions below, then tap Auto-improve.
+            </p>
+          </div>
+          <ol className="divide-y divide-[var(--color-border)]">
+            {review.topFixes.map((fix, i) => {
+              const needsInput = !!fix.requiresUserInput;
+              return (
+                <li key={i} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[var(--color-brand)] text-xs font-semibold">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <p className="font-medium text-sm flex-1 min-w-0">
+                          {fix.title}
+                        </p>
+                        {!needsInput && (
+                          <span className="inline-flex items-center gap-1 text-xs text-[var(--color-brand)] font-medium whitespace-nowrap">
+                            <Wand2 className="h-3 w-3" /> AI will fix
+                          </span>
+                        )}
+                      </div>
+                      {needsInput && fix.userQuestion && (
+                        <>
+                          <p className="text-sm text-[var(--color-muted)] mt-1.5 leading-relaxed">
+                            {fix.userQuestion}
+                          </p>
+                          <input
+                            type="text"
+                            value={userAnswers[i] ?? ""}
+                            onChange={(e) =>
+                              onUserAnswerChange({
+                                ...userAnswers,
+                                [i]: e.target.value,
+                              })
+                            }
+                            placeholder={fix.inputPlaceholder ?? "Your answer"}
+                            disabled={improving}
+                            className={cn(
+                              "mt-2 w-full rounded-md border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm",
+                              "focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-[var(--color-brand)]",
+                              "disabled:opacity-60",
+                            )}
+                          />
+                          <p className="text-xs text-[var(--color-muted-soft)] mt-1">
+                            Optional. Leave blank to skip.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+          {canAutoImprove && (
+            <div className="p-4 border-t border-[var(--color-border)]">
+              <Button
+                onClick={onAutoImprove}
+                disabled={improving}
+                className="w-full"
+                size="lg"
+              >
+                <Wand2 className="h-4 w-4" />
+                Auto-improve
+              </Button>
+            </div>
           )}
         </div>
-      )}
-
-      {(lowScoring.length > 0 || highScoring.length > 0) && (
-        <details className="rounded-lg border border-[var(--color-border)] bg-white group">
-          <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
-            <span>
-              Criteria breakdown
-              <span className="text-[var(--color-muted)] font-normal ml-1.5">
-                ({lowScoring.length > 0
-                  ? `${lowScoring.length} need work, ${highScoring.length} met`
-                  : `all ${highScoring.length} met`})
-              </span>
-            </span>
-            <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
-          </summary>
-          <ul className="divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
-            {[...lowScoring, ...highScoring].map((c) => (
-              <li key={c.criterionId} className="p-4">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <p className="font-medium flex-1 min-w-0 text-sm">
-                    {c.criterionText}
-                  </p>
-                  <ScoreBadge score={c.score} label={c.label} />
-                </div>
-                <p className="mt-1.5 text-sm text-[var(--color-muted)] leading-relaxed">
-                  {c.feedback}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      {/* Only show the fixes list BEFORE auto-improve has run. Once the
-          loop has either applied them or stopped because it couldn't
-          improve further, the remaining fixes aren't actionable from this
-          screen — the user needs to edit manually or re-score first. */}
-      {fixCount > 0 && !hasRunAutoImprove && (
-        <details className="rounded-lg border border-[var(--color-border)] bg-white group">
-          <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
-            <span>
-              What auto-improve will do
-              <span className="text-[var(--color-muted)] font-normal ml-1.5">
-                ({fixCount} {fixCount === 1 ? "fix" : "fixes"})
-              </span>
-            </span>
-            <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
-          </summary>
-          <ol className="divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
-            {review.topFixes.map((fix, i) => (
-              <li key={i} className="p-4">
-                <p className="font-medium text-sm">
-                  {i + 1}. {fix.title}
-                </p>
-                <p className="mt-1 text-sm text-[var(--color-muted)] leading-relaxed">
-                  {fix.suggestion}
-                </p>
-              </li>
-            ))}
-          </ol>
-        </details>
       )}
     </div>
   );
@@ -2247,69 +2250,3 @@ const decisionStyles: Record<
   },
 };
 
-function ScoreBadge({
-  score,
-  label,
-}: {
-  score: 0 | 1 | 2 | 3;
-  label: string;
-}) {
-  const styles = [
-    "bg-red-50 text-red-700 border-red-200",
-    "bg-amber-50 text-amber-800 border-amber-200",
-    "bg-[var(--color-brand-soft)] text-[var(--color-brand)] border-[var(--color-brand)]",
-    "bg-[var(--color-brand-soft)] text-[var(--color-brand)] border-[var(--color-brand)]",
-  ];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border whitespace-nowrap",
-        styles[score],
-      )}
-    >
-      <span className="font-semibold tabular-nums">{score}/3</span>
-      <span>·</span>
-      <span>{label}</span>
-    </span>
-  );
-}
-
-function ReviewList({
-  icon,
-  title,
-  items,
-  accentClass,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  items: string[];
-  accentClass: string;
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <span
-          className={cn(
-            "inline-flex h-7 w-7 items-center justify-center rounded-md",
-            accentClass,
-          )}
-        >
-          {icon}
-        </span>
-        <h3 className="font-semibold">{title}</h3>
-      </div>
-      {items.length === 0 ? (
-        <p className="text-sm text-[var(--color-muted-soft)]">Nothing flagged.</p>
-      ) : (
-        <ul className="space-y-2 text-sm leading-relaxed">
-          {items.map((item, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="text-[var(--color-muted-soft)]">•</span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}

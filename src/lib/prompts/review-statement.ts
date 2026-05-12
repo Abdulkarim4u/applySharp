@@ -33,39 +33,46 @@ Return ONLY valid JSON. No preamble, no markdown.
   "topFixes": [
     {
       "title": short imperative, max 8 words,
-      "suggestion": one sentence, max 25 words, MUST be an action the AI can perform alone using only the statement+CV (rewrite, soften, condense, remove unsupported claim, anchor to existing CV facts). Do NOT suggest fixes that need real-world details the AI cannot fabricate.,
-      "requiresUserInput": false (always — see rules)
+      "suggestion": one sentence, max 20 words, what the AI will do once it has any needed user input,
+      "requiresUserInput": true | false,
+      "userQuestion": ONLY when requiresUserInput is true. ONE simple line, max 10 words, asking for a single specific fact. Examples: "What's your NVQ Level 3 completion date?", "What's your NMC registration number?", "How many patients per shift do you typically support?", "Did you ever shadow a senior nurse? (yes/no)",
+      "inputPlaceholder": ONLY when requiresUserInput is true. Example answer, max 6 words. Examples: "June 2025", "NMC 12345", "8-10 patients", "yes"
     }
   ]
 }
 
-CRITICAL — every fix must be applicable by the AI alone using ONLY the existing statement + CV. NEVER suggest a fix that requires the AI (or the user) to supply a fact it doesn't already have.
+EXACTLY 3 topFixes. Always. Not 2, not 4, not 5. Three.
 
-ABSOLUTELY FORBIDDEN — do NOT suggest fixes like these, even with "e.g." examples:
-- "Add expected completion date for NVQ Level 3 (e.g. June 2025)" — fabricated date.
-- "Add NMC/HCPC registration number" — fabricated number.
-- "Add a specific STAR example for pressure situations" — invented incident.
-- "Mention how many patients per shift you typically support (e.g. 8-10)" — invented number.
-- "Add the name of the consultant who supervised you" — invented name.
-- ANY suggestion containing "e.g." followed by a fabricated number, date, name, or specific incident.
+Pick the 3 fixes with the highest score-impact. Each fix is either:
 
-ALLOWED FIX PATTERNS (use these structures only):
-- "Remove the [X] reference — irrelevant to the role."
-- "Soften the [X] claim from [strong wording] to [working-towards wording]."
-- "Cut the generic opener; start with the [specific CV item] experience."
-- "Tighten [section] by [N] words by removing [repetitive/generic content]."
-- "Move the [X paragraph] earlier to front-load c[N] evidence."
-- "Replace the generic 'I'm committed to continuing to develop' with a concrete reference to [a skill already mentioned in the CV]."
-- "Anchor the [X] claim to the specific [employer/system/qualification] already in the CV."
+A) AI-applicable (requiresUserInput: false) — the AI can apply this using only the existing statement + CV. Use these patterns:
+- "Remove [X] reference — irrelevant"
+- "Soften [strong claim] to [working-towards wording]"
+- "Cut generic opener; start with [specific CV experience]"
+- "Tighten [section] by [N] words"
+- "Move [paragraph] earlier to front-load c[N] evidence"
+- "Replace generic [phrase] with reference to [CV item]"
+- "Anchor [claim] to specific [employer/system] in CV"
 
-Self-check before emitting each fix: can this be applied by reading only the existing statement and the CV? If no, REPLACE it with a SOFTEN or REMOVE fix instead, or omit it.
+B) User-input (requiresUserInput: true) — needs ONE specific fact the AI cannot fabricate. Allowed when this single fact would significantly improve the score. Examples:
+- A specific date (completion, start, qualification)
+- A specific number (registration, candidate number, patient volume)
+- A yes/no confirmation (have you done X? did Y happen?)
+- A single short value (name of supervisor, name of a course)
 
-- Always set requiresUserInput to false.
+The userQuestion MUST be answerable in under 10 seconds. ONE line. NO compound questions, NO multi-part requests. NEVER ask for a STAR story or a paragraph — only a single fact.
+
+DO NOT EVER include a fix that needs a multi-sentence STAR example or detailed incident. If a criterion is weak because no STAR example exists, the fix is "Soften X claim" (AI-applicable), not "Tell us about a pressurised shift" (cognitive overload).
+
+Self-check before emitting each fix:
+- Is it AI-applicable? Good.
+- Does it need ONE simple fact answerable in under 10 seconds? OK, requiresUserInput=true.
+- Does it need a story, paragraph, or multi-part answer? REJECT — replace with a soften/remove fix instead.
 
 Rules:
 - Score ONLY essential criteria. Skip desirable.
 - British English in all feedback.
-- Maximum 3 topFixes, ranked by impact.
+- EXACTLY 3 topFixes, ranked by impact.
 - Be specific, brief, harsh.`;
 
 export function buildReviewUser(input: {
