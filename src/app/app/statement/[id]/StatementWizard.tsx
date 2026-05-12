@@ -195,7 +195,7 @@ export function StatementWizard({ initial }: { initial: StatementRecord }) {
                 person_spec: personSpec,
                 title:
                   s.title === "Untitled statement"
-                    ? `${personSpec.jobTitle}${personSpec.band ? ` · ${personSpec.band}` : ""}`
+                    ? `${personSpec.jobTitle}${personSpec.band ? ` · Band ${personSpec.band}` : ""}`
                     : s.title,
               });
               goto(1);

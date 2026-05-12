@@ -97,10 +97,13 @@ export default async function DashboardPage() {
                   <FileText className="h-5 w-5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-medium truncate">
-                      {s.title || "Untitled statement"}
-                    </h3>
+                  {/* Title on its own line — truncates cleanly on any width */}
+                  <h3 className="font-medium truncate">
+                    {s.title || "Untitled statement"}
+                  </h3>
+                  {/* Meta line below: badges + date. Wraps gracefully when
+                      space runs out instead of fighting the title for width. */}
+                  <div className="mt-1 flex items-center gap-x-2 gap-y-1 text-sm text-[var(--color-muted)] flex-wrap">
                     <StatusBadge status={s.status} />
                     {typeof s.last_score === "number" && (
                       <ScoreChip
@@ -108,13 +111,12 @@ export default async function DashboardPage() {
                         decision={s.last_decision}
                       />
                     )}
+                    <span className="truncate">
+                      {formatRelative(s.updated_at)}
+                    </span>
                   </div>
-                  <p className="text-sm text-[var(--color-muted)] mt-0.5 truncate">
-                    {jobLabel(s.person_spec)} · Updated{" "}
-                    {formatRelative(s.updated_at)}
-                  </p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-[var(--color-muted-soft)] group-hover:text-[var(--color-brand)] group-hover:translate-x-0.5 transition-all" />
+                <ArrowRight className="h-4 w-4 text-[var(--color-muted-soft)] group-hover:text-[var(--color-brand)] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
               </Link>
             </li>
           ))}
@@ -195,19 +197,12 @@ function ScoreChip({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${tone}`}
-      title={decision ? `Shortlister: ${decision}` : `Score ${score}/100`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${tone}`}
+      title={decision ? `Shortlister: ${decision} (${score}/100)` : `Score ${score}/100`}
     >
-      {score}<span className="opacity-60">/100</span>
+      {score}
     </span>
   );
-}
-
-function jobLabel(spec: unknown): string {
-  if (!spec || typeof spec !== "object") return "NHS application";
-  const s = spec as { jobTitle?: string; band?: string | null };
-  if (!s.jobTitle) return "NHS application";
-  return s.band ? `${s.jobTitle} · Band ${s.band}` : s.jobTitle;
 }
 
 function pickFirstName(fullName: string | undefined, email: string | undefined): string {
