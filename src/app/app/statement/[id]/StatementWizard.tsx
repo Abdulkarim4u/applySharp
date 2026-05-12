@@ -1053,8 +1053,7 @@ function GapFillStep({
 
   return (
     <StepShell
-      title="Optional — add personal stories for a stronger first version"
-      description="Your CV alone will produce a good statement. Adding 1-2 specific stories below makes it exceptional. You can also skip this step entirely and add details later for whatever criteria score low."
+      title="Personal stories (optional)"
       back={
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" /> Back
@@ -1076,120 +1075,108 @@ function GapFillStep({
         </div>
       ) : (
         <>
-          <div className="rounded-md border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-5 mb-5">
-            <p className="font-semibold text-[var(--color-brand)]">
-              Recommended: skip and generate now
-            </p>
-            <p className="text-sm text-[var(--color-brand)] mt-1.5 leading-relaxed">
-              The AI will write the strongest statement it can from your CV.
-              You&apos;ll get a score in about 30 seconds. If anything scores
-              low, the next step will ask you for just those specific details
-              (usually 1-2 questions, not 5). Most users finish in 3-5 minutes
-              total this way.
-            </p>
-            <Button
-              onClick={onContinue}
-              size="lg"
-              className="mt-4"
-            >
+          <div className="rounded-lg border border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-4 sm:p-5 mb-4">
+            <Button onClick={onContinue} size="lg" className="w-full sm:w-auto">
               <Sparkles className="h-4 w-4" />
               Skip and generate now
             </Button>
+            <p className="text-sm text-[var(--color-brand)] mt-3 leading-relaxed">
+              Quickest path. The AI writes from your CV, then asks for any
+              specifics that need real-world detail after scoring.
+            </p>
           </div>
 
-          <details className="mb-5 rounded-md border border-[var(--color-border)] bg-white">
-            <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors">
-              Or fill in personal stories for the strongest first version
-              <span className="text-[var(--color-muted)] font-normal ml-1">
-                (~10 minutes, optional)
+          <details
+            className="rounded-md border border-[var(--color-border)] bg-white group"
+            open={personalisedCount > 0}
+          >
+            <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
+              <span>
+                Add personal stories first
+                <span className="text-[var(--color-muted)] font-normal ml-1">
+                  (~10 min)
+                </span>
               </span>
+              <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
             </summary>
             <div className="border-t border-[var(--color-border)] p-4">
-              <p className="text-xs text-[var(--color-muted)] leading-relaxed">
-                Each answer is pre-filled with a skeleton anchored to your CV.
-                Replace the [bracketed prompts] with your real specifics. Skip
-                any you don&apos;t want to answer — empty answers just produce
-                general statements that you can refine later.
+              <p className="text-xs text-[var(--color-muted)] leading-relaxed mb-5">
+                Each answer is pre-filled from your CV. Replace the
+                [bracketed parts] with your specifics.
               </p>
-            </div>
-          </details>
-          <ul className="space-y-6">
-            {gapFills.map((g, i) => {
-              const hasBrackets = /\[[^\]]+\]/.test(g.answer);
-              const isDraftStillIntact =
-                g.draftAnswer && g.answer === g.draftAnswer;
-              return (
-                <li key={g.criterionId} className="space-y-2.5">
-                  <div>
-                    <p className="text-xs font-medium text-[var(--color-brand)] uppercase tracking-wider">
-                      Question {i + 1} of {total}
-                    </p>
-                    <p className="font-medium mt-1.5">{g.criterionText}</p>
-                    {g.question && (
-                      <p className="text-sm text-[var(--color-muted)] mt-2 leading-relaxed">
-                        {g.question}
-                      </p>
-                    )}
-                    {g.hint && (
-                      <p className="text-xs text-[var(--color-muted-soft)] mt-2 leading-relaxed">
-                        💡 {g.hint}
-                      </p>
-                    )}
-                  </div>
-                  <Textarea
-                    value={g.answer}
-                    onChange={(e) => {
-                      const next = gapFills.slice();
-                      next[i] = { ...g, answer: e.target.value };
-                      onChange(next);
-                    }}
-                    placeholder="Tell us about a specific time…"
-                    rows={5}
-                  />
-                  <div className="flex items-center justify-between gap-3 text-xs flex-wrap">
-                    {hasBrackets ? (
-                      <span className="text-amber-700">
-                        ⚠ Replace the [bracketed parts] with your real details
-                      </span>
-                    ) : g.answer.trim().length > 0 ? (
-                      <span className="text-[var(--color-brand)]">
-                        ✓ Answered
-                      </span>
-                    ) : (
-                      <span className="text-[var(--color-muted-soft)]">
-                        Empty — skipped
-                      </span>
-                    )}
-                    {g.draftAnswer && (
-                      <button
-                        type="button"
-                        onClick={() => {
+              <ul className="space-y-6">
+                {gapFills.map((g, i) => {
+                  const hasBrackets = /\[[^\]]+\]/.test(g.answer);
+                  const isDraftStillIntact =
+                    g.draftAnswer && g.answer === g.draftAnswer;
+                  return (
+                    <li key={g.criterionId} className="space-y-2.5">
+                      <div>
+                        <p className="text-xs font-medium text-[var(--color-brand)] uppercase tracking-wider">
+                          Question {i + 1} of {total}
+                        </p>
+                        <p className="font-medium mt-1.5">{g.criterionText}</p>
+                        {g.question && (
+                          <p className="text-sm text-[var(--color-muted)] mt-2 leading-relaxed">
+                            {g.question}
+                          </p>
+                        )}
+                        {g.hint && (
+                          <p className="text-xs text-[var(--color-muted-soft)] mt-2 leading-relaxed">
+                            {g.hint}
+                          </p>
+                        )}
+                      </div>
+                      <Textarea
+                        value={g.answer}
+                        onChange={(e) => {
                           const next = gapFills.slice();
-                          next[i] = {
-                            ...g,
-                            answer: isDraftStillIntact ? "" : (g.draftAnswer ?? ""),
-                          };
+                          next[i] = { ...g, answer: e.target.value };
                           onChange(next);
                         }}
-                        className="text-[var(--color-muted)] hover:text-[var(--color-fg)] underline"
-                      >
-                        {isDraftStillIntact ? "Clear and write from scratch" : "Reset to AI draft"}
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                        placeholder="Tell us about a specific time…"
+                        rows={5}
+                      />
+                      <div className="flex items-center justify-between gap-3 text-xs flex-wrap">
+                        {hasBrackets ? (
+                          <span className="text-amber-700">
+                            Replace the [brackets] with your real details
+                          </span>
+                        ) : g.answer.trim().length > 0 ? (
+                          <span className="text-[var(--color-brand)]">
+                            Personalised
+                          </span>
+                        ) : (
+                          <span className="text-[var(--color-muted-soft)]">
+                            Skipped
+                          </span>
+                        )}
+                        {g.draftAnswer && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = gapFills.slice();
+                              next[i] = {
+                                ...g,
+                                answer: isDraftStillIntact
+                                  ? ""
+                                  : (g.draftAnswer ?? ""),
+                              };
+                              onChange(next);
+                            }}
+                            className="text-[var(--color-muted)] hover:text-[var(--color-fg)] underline"
+                          >
+                            {isDraftStillIntact ? "Clear" : "Reset to draft"}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </details>
         </>
-      )}
-
-      {gapFills.length > 0 && (
-        <p className="mt-5 text-xs text-[var(--color-muted-soft)]">
-          {personalisedCount === 0
-            ? `All ${total} answers are still AI drafts with [brackets]. The AI will treat those as unfilled and write general statements for those criteria. Add your specifics for stronger output.`
-            : `${personalisedCount} of ${total} personalised. The rest will be general statements drawn from your CV.`}
-        </p>
       )}
     </StepShell>
   );
