@@ -33,17 +33,17 @@ Return ONLY valid JSON. No preamble, no markdown.
   "topFixes": [
     {
       "title": short imperative, max 8 words,
-      "suggestion": one sentence, max 25 words,
-      "requiresUserInput": boolean,
-      "userQuestion": only when requiresUserInput is true, max 20 words,
-      "inputPlaceholder": only when requiresUserInput is true, max 12 words
+      "suggestion": one sentence, max 25 words, MUST be an action the AI can perform alone using only the statement+CV (rewrite, soften, condense, remove unsupported claim, anchor to existing CV facts). Do NOT suggest fixes that need real-world details the AI cannot fabricate.,
+      "requiresUserInput": false (always — see rules)
     }
   ]
 }
 
-"requiresUserInput" rules:
-- false: AI can fix this alone (restructure, reword, expand from CV/STAR answers)
-- true: needs real-world detail AI can't fabricate (registration numbers, specific dates, particular incidents not yet mentioned). Default to false.
+CRITICAL — every fix must be applicable by the AI alone:
+- GOOD fixes: "Remove the Boots retail mention as it's irrelevant", "Soften the NVQ Level 3 claim to working-towards", "Cut the generic opener and start with the Manchester Royal experience", "Tighten the closing paragraph by 30 words".
+- BAD fixes (NEVER suggest these): "Add NVQ Level 3 completion date", "Add registration number", "Add a specific STAR example for pressure situations". These need facts the AI can't invent.
+- If a criterion is weak because of missing specifics the AI can't fabricate, the right fix is to SOFTEN or REMOVE the claim, not to ADD invented detail.
+- Always set requiresUserInput to false.
 
 Rules:
 - Score ONLY essential criteria. Skip desirable.

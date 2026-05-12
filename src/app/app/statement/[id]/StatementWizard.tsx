@@ -25,10 +25,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   AlertTriangle,
-  Wrench,
   Download,
   ChevronDown,
-  ChevronUp,
   Wand2,
   TrendingUp,
 } from "lucide-react";
@@ -1217,7 +1215,6 @@ function GenerateStep({
   const [improveStage, setImproveStage] = useState<string>("");
   const [scoreHistory, setScoreHistory] = useState<number[]>([]);
   const [improveError, setImproveError] = useState<string | null>(null);
-  const [userInputAnswers, setUserInputAnswers] = useState<Record<number, string>>({});
 
   const [justSaved, setJustSaved] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
@@ -1521,83 +1518,6 @@ function GenerateStep({
     triggerDownload(blob, "pdf");
   }
 
-  async function applyUserInputs() {
-    if (!review || !statement.person_spec) return;
-    const userFixes = review.topFixes.filter((f) => f.requiresUserInput);
-    const fixesWithInput = userFixes
-      .map((fix, idx) => ({
-        title: fix.title,
-        suggestion: fix.suggestion,
-        userInput: userInputAnswers[idx]?.trim(),
-      }))
-      .filter(
-        (f): f is { title: string; suggestion: string; userInput: string } =>
-          !!f.userInput && f.userInput.length > 0,
-      );
-
-    if (fixesWithInput.length === 0) return;
-
-    setImproving(true);
-    setImproveStartedAt(Date.now());
-    setImproveError(null);
-    setImproveStage(
-      `Weaving in your ${fixesWithInput.length} detail${fixesWithInput.length === 1 ? "" : "s"}…`,
-    );
-    setScoreHistory([review.overallScore]);
-
-    try {
-      const improveRes = await fetch("/api/improve-statement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          statementId: statement.id,
-          currentStatement: text,
-          fixes: fixesWithInput,
-          jobTitle: statement.person_spec.jobTitle,
-          organisation: statement.person_spec.organisation,
-        }),
-      });
-      const improveData = await improveRes.json().catch(() => ({}));
-      if (!improveRes.ok) {
-        throw new Error(improveData.error ?? "Failed to apply your details");
-      }
-      const newText = improveData.statement;
-      setText(newText);
-
-      setImproveStage("Re-scoring with shortlister…");
-      const reviewRes = await fetch("/api/review-statement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          personSpec: statement.person_spec,
-          statementText: newText,
-        }),
-      });
-      const reviewData = await reviewRes.json().catch(() => ({}));
-      if (!reviewRes.ok) {
-        throw new Error(reviewData.error ?? "Re-scoring failed");
-      }
-      const newReview = reviewData.review as ReviewResult;
-      setReview(newReview);
-      setScoreHistory((h) => [...h, newReview.overallScore]);
-      setUserInputAnswers({});
-
-      setTimeout(() => {
-        const ta = document.querySelector<HTMLTextAreaElement>(
-          'textarea[placeholder*="statement"]',
-        );
-        if (ta) ta.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
-    } catch (e) {
-      setImproveError(
-        e instanceof Error ? e.message : "Failed to apply your details",
-      );
-    } finally {
-      setImproving(false);
-      setImproveStage("");
-    }
-  }
-
   async function autoImprove() {
     if (!review || !statement.person_spec) return;
     const TARGET_SCORE = 95;
@@ -1615,14 +1535,11 @@ function GenerateStep({
     try {
       for (let i = 0; i < MAX_ITERATIONS; i++) {
         if (currentReview.overallScore >= TARGET_SCORE) break;
-        // Only feed the AI fixes it can actually apply on its own
-        const aiApplicable = currentReview.topFixes.filter(
-          (f) => !f.requiresUserInput,
-        );
-        if (aiApplicable.length === 0) break;
+        const fixes = currentReview.topFixes;
+        if (fixes.length === 0) break;
 
         setImproveStage(
-          `Iteration ${i + 1} of ${MAX_ITERATIONS} · applying ${aiApplicable.length} fix${aiApplicable.length === 1 ? "" : "es"}…`,
+          `Round ${i + 1} of ${MAX_ITERATIONS} · applying ${fixes.length} fix${fixes.length === 1 ? "" : "es"}…`,
         );
         const improveRes = await fetch("/api/improve-statement", {
           method: "POST",
@@ -1630,7 +1547,7 @@ function GenerateStep({
           body: JSON.stringify({
             statementId: statement.id,
             currentStatement: currentText,
-            fixes: aiApplicable,
+            fixes,
             jobTitle: statement.person_spec.jobTitle,
             organisation: statement.person_spec.organisation,
           }),
@@ -1642,7 +1559,7 @@ function GenerateStep({
         currentText = improveData.statement;
         setText(currentText);
 
-        setImproveStage(`Iteration ${i + 1} of ${MAX_ITERATIONS} · re-scoring…`);
+        setImproveStage(`Round ${i + 1} of ${MAX_ITERATIONS} · re-scoring…`);
         const reviewRes = await fetch("/api/review-statement", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2016,9 +1933,6 @@ function GenerateStep({
           scoreHistory={scoreHistory}
           onAutoImprove={autoImprove}
           improving={improving}
-          userInputAnswers={userInputAnswers}
-          onUserInputChange={setUserInputAnswers}
-          onApplyUserInputs={applyUserInputs}
         />
       )}
     </section>
@@ -2076,56 +1990,42 @@ function ReviewCard({
   scoreHistory,
   onAutoImprove,
   improving,
-  userInputAnswers,
-  onUserInputChange,
-  onApplyUserInputs,
 }: {
   review: ReviewResult;
   scoreHistory: number[];
   onAutoImprove: () => void;
   improving: boolean;
-  userInputAnswers: Record<number, string>;
-  onUserInputChange: (a: Record<number, string>) => void;
-  onApplyUserInputs: () => void;
 }) {
   const decisionStyle = decisionStyles[review.shortlistDecision];
-  const [showAllCriteria, setShowAllCriteria] = useState(false);
   const previousScore = scoreHistory.length >= 2 ? scoreHistory[0] : null;
   const scoreImproved =
     previousScore !== null && review.overallScore > previousScore;
+  const fixCount = review.topFixes.length;
   const canAutoImprove =
-    review.overallScore < 95 &&
-    review.topFixes.some((f) => !f.requiresUserInput) &&
-    !improving;
+    review.overallScore < 95 && fixCount > 0 && !improving;
 
   const lowScoring = review.criterionScores.filter((c) => c.score < 2);
   const highScoring = review.criterionScores.filter((c) => c.score >= 2);
 
-  // Split fixes into ones AI can apply vs ones needing user's real-world input
-  const aiApplicableFixes = review.topFixes.filter((f) => !f.requiresUserInput);
-  const userInputFixes = review.topFixes.filter((f) => f.requiresUserInput);
-  const allAiFixesExhausted =
-    scoreHistory.length > 1 && aiApplicableFixes.length === 0;
-
   return (
-    <div className="mt-6 space-y-5">
+    <div className="mt-6 space-y-4">
       <div
         className={cn(
-          "rounded-lg border p-5 sm:p-6",
+          "rounded-lg border p-4 sm:p-5",
           decisionStyle.cardClass,
         )}
       >
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <span
-              className={cn(
-                "inline-flex h-10 w-10 items-center justify-center rounded-full",
-                decisionStyle.iconBg,
-              )}
-            >
-              {decisionStyle.icon}
-            </span>
-            <div>
+        <div className="flex items-start gap-3">
+          <span
+            className={cn(
+              "inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full",
+              decisionStyle.iconBg,
+            )}
+          >
+            {decisionStyle.icon}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <p
                 className={cn(
                   "text-xs font-semibold uppercase tracking-wider",
@@ -2134,270 +2034,114 @@ function ReviewCard({
               >
                 {decisionStyle.title}
               </p>
-              <p className="text-lg sm:text-xl font-semibold tracking-tight mt-0.5">
-                {review.verdict}
+              <p className="text-2xl font-semibold tabular-nums flex items-center gap-1.5">
+                {scoreImproved && previousScore !== null && (
+                  <span className="inline-flex items-center gap-0.5 text-xs font-medium text-[var(--color-brand)]">
+                    <TrendingUp className="h-3 w-3" />+
+                    {review.overallScore - previousScore}
+                  </span>
+                )}
+                {review.overallScore}
+                <span className="text-sm text-[var(--color-muted)] font-normal">
+                  /100
+                </span>
               </p>
             </div>
-          </div>
-          <div className="text-right">
-            <p className="text-3xl font-semibold tabular-nums flex items-center gap-2 justify-end">
-              {scoreImproved && previousScore !== null && (
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-brand)]">
-                  <TrendingUp className="h-4 w-4" />+
-                  {review.overallScore - previousScore}
-                </span>
-              )}
-              <span>
-                {review.overallScore}
-                <span className="text-base text-[var(--color-muted)]">/100</span>
-              </span>
+            <p className="text-sm sm:text-base mt-1 leading-snug">
+              {review.verdict}
             </p>
-            <p className="text-xs text-[var(--color-muted)]">overall score</p>
           </div>
         </div>
 
         {canAutoImprove && (
-          <div className="mt-5 pt-5 border-t border-[var(--color-border)] flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p className="font-medium text-sm">
-                {aiApplicableFixes.length} AI-applicable fix
-                {aiApplicableFixes.length === 1 ? "" : "es"} remaining
-              </p>
-              <p className="text-xs text-[var(--color-muted)] mt-0.5">
-                AI will apply them and re-score (up to 3 rounds).
-              </p>
-            </div>
-            <Button onClick={onAutoImprove} disabled={improving}>
-              <Wand2 className="h-4 w-4" />
-              Auto-improve and re-score
-            </Button>
-          </div>
+          <Button
+            onClick={onAutoImprove}
+            disabled={improving}
+            className="w-full mt-4"
+            size="lg"
+          >
+            <Wand2 className="h-4 w-4" />
+            Auto-improve
+          </Button>
         )}
       </div>
 
-      <div className="rounded-lg border border-[var(--color-border)] bg-white">
-        <div className="p-4 sm:p-5 border-b border-[var(--color-border)] flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-semibold">Essential criteria scores</h3>
-            <p className="text-xs text-[var(--color-muted)] mt-0.5">
-              {lowScoring.length > 0
-                ? `${lowScoring.length} need attention · ${highScoring.length} already strong`
-                : "All criteria met or strongly met."}
-            </p>
-          </div>
-          {highScoring.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAllCriteria((v) => !v)}
-              className="text-xs font-medium text-[var(--color-brand)] hover:underline whitespace-nowrap flex items-center gap-1"
-            >
-              {showAllCriteria ? (
-                <>
-                  Hide strong <ChevronUp className="h-3 w-3" />
-                </>
-              ) : (
-                <>
-                  Show all <ChevronDown className="h-3 w-3" />
-                </>
-              )}
-            </button>
+      {(review.strengths.length > 0 || review.weaknesses.length > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {review.strengths.length > 0 && (
+            <ReviewList
+              icon={<ThumbsUp className="h-4 w-4" />}
+              title="Strengths"
+              items={review.strengths}
+              accentClass="text-[var(--color-brand)] bg-[var(--color-brand-soft)]"
+            />
+          )}
+          {review.weaknesses.length > 0 && (
+            <ReviewList
+              icon={<ThumbsDown className="h-4 w-4" />}
+              title="Gaps"
+              items={review.weaknesses}
+              accentClass="text-amber-800 bg-amber-50"
+            />
           )}
         </div>
-        <ul className="divide-y divide-[var(--color-border)]">
-          {/* Always show criteria that need attention, expanded */}
-          {lowScoring.map((c) => (
-            <li key={c.criterionId} className="p-4 sm:p-5">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <p className="font-medium flex-1 min-w-0">{c.criterionText}</p>
-                <ScoreBadge score={c.score} label={c.label} />
-              </div>
-              <p className="mt-2 text-sm text-[var(--color-muted)] leading-relaxed">
-                {c.feedback}
-              </p>
-            </li>
-          ))}
-          {/* Strong criteria — collapsed by default, one-line each */}
-          {showAllCriteria &&
-            highScoring.map((c) => (
-              <li key={c.criterionId} className="p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <p className="font-medium flex-1 min-w-0">{c.criterionText}</p>
+      )}
+
+      {(lowScoring.length > 0 || highScoring.length > 0) && (
+        <details className="rounded-lg border border-[var(--color-border)] bg-white group">
+          <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
+            <span>
+              Criteria breakdown
+              <span className="text-[var(--color-muted)] font-normal ml-1.5">
+                ({lowScoring.length > 0
+                  ? `${lowScoring.length} need work, ${highScoring.length} met`
+                  : `all ${highScoring.length} met`})
+              </span>
+            </span>
+            <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
+          </summary>
+          <ul className="divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
+            {[...lowScoring, ...highScoring].map((c) => (
+              <li key={c.criterionId} className="p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <p className="font-medium flex-1 min-w-0 text-sm">
+                    {c.criterionText}
+                  </p>
                   <ScoreBadge score={c.score} label={c.label} />
                 </div>
-                <p className="mt-2 text-sm text-[var(--color-muted)] leading-relaxed">
+                <p className="mt-1.5 text-sm text-[var(--color-muted)] leading-relaxed">
                   {c.feedback}
                 </p>
               </li>
             ))}
-          {!showAllCriteria && highScoring.length > 0 && (
-            <li className="p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={() => setShowAllCriteria(true)}
-                className="w-full text-left text-sm text-[var(--color-muted)] hover:text-[var(--color-fg)]"
-              >
-                <span className="text-[var(--color-brand)] font-medium">
-                  + {highScoring.length} criteria already met
-                </span>{" "}
-                · click to expand
-              </button>
-            </li>
-          )}
-        </ul>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ReviewList
-          icon={<ThumbsUp className="h-4 w-4" />}
-          title="What's working"
-          items={review.strengths}
-          accentClass="text-[var(--color-brand)] bg-[var(--color-brand-soft)]"
-        />
-        <ReviewList
-          icon={<ThumbsDown className="h-4 w-4" />}
-          title="What's missing"
-          items={review.weaknesses}
-          accentClass="text-amber-800 bg-amber-50"
-        />
-      </div>
-
-      {userInputFixes.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50">
-          <div className="p-4 sm:p-5 border-b border-amber-200">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-700" />
-              <h3 className="font-semibold text-amber-900">
-                Just answer these and AI will weave them in
-              </h3>
-            </div>
-            <p className="text-xs text-amber-800 mt-1">
-              These are the only things the AI can&apos;t make up — your real
-              numbers, dates and stories. Type a quick answer to each one
-              you know, then click <strong>Apply my details &amp; re-score</strong>.
-              Skip any you don&apos;t want to include.
-            </p>
-          </div>
-          <ol className="divide-y divide-amber-200">
-            {userInputFixes.map((fix, i) => {
-              const question = fix.userQuestion ?? fix.suggestion;
-              const placeholder =
-                fix.inputPlaceholder ?? "Type your answer here…";
-              const value = userInputAnswers[i] ?? "";
-              return (
-                <li key={i} className="p-4 sm:p-5">
-                  <div className="flex items-start gap-3">
-                    <span className="flex-shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-200 text-amber-900 text-xs font-semibold">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-amber-900">{fix.title}</p>
-                      <p className="mt-1.5 text-sm text-amber-800 leading-relaxed">
-                        {question}
-                      </p>
-                      <textarea
-                        value={value}
-                        onChange={(e) =>
-                          onUserInputChange({
-                            ...userInputAnswers,
-                            [i]: e.target.value,
-                          })
-                        }
-                        placeholder={placeholder}
-                        rows={2}
-                        disabled={improving}
-                        className={cn(
-                          "mt-3 w-full rounded-md border border-amber-300 bg-white p-3 text-sm",
-                          "placeholder:text-amber-400 text-[var(--color-fg)]",
-                          "focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500",
-                          "disabled:opacity-60 resize-y min-h-[3.5rem]",
-                        )}
-                      />
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-          <div className="p-4 sm:p-5 border-t border-amber-200 flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs text-amber-800">
-              {Object.values(userInputAnswers).filter((a) => a?.trim()).length}{" "}
-              of {userInputFixes.length} answered
-            </p>
-            <Button
-              onClick={onApplyUserInputs}
-              disabled={
-                improving ||
-                Object.values(userInputAnswers).filter((a) => a?.trim()).length ===
-                  0
-              }
-              className="bg-amber-700 hover:bg-amber-800 text-white"
-            >
-              {improving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Applying…
-                </>
-              ) : (
-                <>
-                  <Wand2 className="h-4 w-4" />
-                  Apply my details &amp; re-score
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+          </ul>
+        </details>
       )}
 
-      {aiApplicableFixes.length > 0 && (
-        <div className="rounded-lg border border-[var(--color-border)] bg-white">
-          <div className="p-4 sm:p-5 border-b border-[var(--color-border)]">
-            <div className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-[var(--color-brand)]" />
-              <h3 className="font-semibold">
-                {scoreHistory.length > 1
-                  ? "AI-applicable refinements remaining"
-                  : "Top fixes to improve your score"}
-              </h3>
-            </div>
-            <p className="text-xs text-[var(--color-muted)] mt-1">
-              {scoreHistory.length > 1
-                ? "Click Auto-improve again to apply these too."
-                : "Auto-improve will apply these for you."}
-            </p>
-          </div>
-          <ol className="divide-y divide-[var(--color-border)]">
-            {aiApplicableFixes.map((fix, i) => (
-              <li key={i} className="p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="flex-shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[var(--color-brand)] text-xs font-semibold">
-                    {i + 1}
-                  </span>
-                  <div className="flex-1">
-                    <p className="font-medium">{fix.title}</p>
-                    <p className="mt-1 text-sm text-[var(--color-muted)] leading-relaxed">
-                      {fix.suggestion}
-                    </p>
-                  </div>
-                </div>
+      {fixCount > 0 && (
+        <details className="rounded-lg border border-[var(--color-border)] bg-white group">
+          <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
+            <span>
+              What auto-improve will do
+              <span className="text-[var(--color-muted)] font-normal ml-1.5">
+                ({fixCount} {fixCount === 1 ? "fix" : "fixes"})
+              </span>
+            </span>
+            <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
+          </summary>
+          <ol className="divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
+            {review.topFixes.map((fix, i) => (
+              <li key={i} className="p-4">
+                <p className="font-medium text-sm">
+                  {i + 1}. {fix.title}
+                </p>
+                <p className="mt-1 text-sm text-[var(--color-muted)] leading-relaxed">
+                  {fix.suggestion}
+                </p>
               </li>
             ))}
           </ol>
-        </div>
-      )}
-
-      {allAiFixesExhausted && userInputFixes.length === 0 && (
-        <div className="rounded-md bg-[var(--color-brand-soft)] border border-[var(--color-brand)] p-4 flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 text-[var(--color-brand)] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-[var(--color-brand)]">
-              AI has done everything it can.
-            </p>
-            <p className="text-sm text-[var(--color-brand)] mt-0.5">
-              Your statement is in the best shape automation can produce. Final
-              human polish is up to you.
-            </p>
-          </div>
-        </div>
+        </details>
       )}
     </div>
   );
