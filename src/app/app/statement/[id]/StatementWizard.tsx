@@ -1528,14 +1528,18 @@ function GenerateStep({
     setImproveError(null);
     setScoreHistory([review.overallScore]);
 
-    let currentReview = review;
-    let currentText = text;
-    let previousScore = review.overallScore;
+    // Track the BEST version we've seen, not the latest. The improve+re-score
+    // cycle can degrade a statement (later rounds over-edit and lose evidence
+    // that earlier rounds were scoring on). We only commit to UI state when
+    // we beat the best so far, and we always end with the best version
+    // visible — never a regression.
+    let bestReview = review;
+    let bestText = text;
 
     try {
       for (let i = 0; i < MAX_ITERATIONS; i++) {
-        if (currentReview.overallScore >= TARGET_SCORE) break;
-        const fixes = currentReview.topFixes;
+        if (bestReview.overallScore >= TARGET_SCORE) break;
+        const fixes = bestReview.topFixes;
         if (fixes.length === 0) break;
 
         setImproveStage(
@@ -1546,7 +1550,7 @@ function GenerateStep({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             statementId: statement.id,
-            currentStatement: currentText,
+            currentStatement: bestText,
             fixes,
             jobTitle: statement.person_spec.jobTitle,
             organisation: statement.person_spec.organisation,
@@ -1556,8 +1560,7 @@ function GenerateStep({
         if (!improveRes.ok) {
           throw new Error(improveData.error ?? "Improvement failed");
         }
-        currentText = improveData.statement;
-        setText(currentText);
+        const candidateText = improveData.statement;
 
         setImproveStage(`Round ${i + 1} of ${MAX_ITERATIONS} · re-scoring…`);
         const reviewRes = await fetch("/api/review-statement", {
@@ -1565,22 +1568,34 @@ function GenerateStep({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             personSpec: statement.person_spec,
-            statementText: currentText,
+            statementText: candidateText,
           }),
         });
         const reviewData = await reviewRes.json().catch(() => ({}));
         if (!reviewRes.ok) {
           throw new Error(reviewData.error ?? "Re-scoring failed");
         }
-        currentReview = reviewData.review as ReviewResult;
-        setReview(currentReview);
-        setScoreHistory((h) => [...h, currentReview.overallScore]);
+        const candidateReview = reviewData.review as ReviewResult;
 
-        // Stop early if no real improvement (less than 2 points gain)
-        if (currentReview.overallScore - previousScore < 2) {
+        if (candidateReview.overallScore > bestReview.overallScore) {
+          // Improved. Commit and record in history.
+          bestReview = candidateReview;
+          bestText = candidateText;
+          setText(candidateText);
+          setReview(candidateReview);
+          setScoreHistory((h) => [...h, candidateReview.overallScore]);
+        } else {
+          // Regression or no improvement. Keep the best and stop. Don't
+          // record the regression in history; the user shouldn't see
+          // "Score: 88 → 78" when we kept the 88 version.
           break;
         }
-        previousScore = currentReview.overallScore;
+      }
+
+      // The improve API saves every candidate text to the DB, including
+      // regressions. Overwrite with the best version so the DB matches the UI.
+      if (bestText !== text) {
+        onTextUpdate(bestText);
       }
 
       // Scroll the statement back to the top so user can see the changes
