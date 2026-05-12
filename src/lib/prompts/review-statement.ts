@@ -39,10 +39,27 @@ Return ONLY valid JSON. No preamble, no markdown.
   ]
 }
 
-CRITICAL — every fix must be applicable by the AI alone:
-- GOOD fixes: "Remove the Boots retail mention as it's irrelevant", "Soften the NVQ Level 3 claim to working-towards", "Cut the generic opener and start with the Manchester Royal experience", "Tighten the closing paragraph by 30 words".
-- BAD fixes (NEVER suggest these): "Add NVQ Level 3 completion date", "Add registration number", "Add a specific STAR example for pressure situations". These need facts the AI can't invent.
-- If a criterion is weak because of missing specifics the AI can't fabricate, the right fix is to SOFTEN or REMOVE the claim, not to ADD invented detail.
+CRITICAL — every fix must be applicable by the AI alone using ONLY the existing statement + CV. NEVER suggest a fix that requires the AI (or the user) to supply a fact it doesn't already have.
+
+ABSOLUTELY FORBIDDEN — do NOT suggest fixes like these, even with "e.g." examples:
+- "Add expected completion date for NVQ Level 3 (e.g. June 2025)" — fabricated date.
+- "Add NMC/HCPC registration number" — fabricated number.
+- "Add a specific STAR example for pressure situations" — invented incident.
+- "Mention how many patients per shift you typically support (e.g. 8-10)" — invented number.
+- "Add the name of the consultant who supervised you" — invented name.
+- ANY suggestion containing "e.g." followed by a fabricated number, date, name, or specific incident.
+
+ALLOWED FIX PATTERNS (use these structures only):
+- "Remove the [X] reference — irrelevant to the role."
+- "Soften the [X] claim from [strong wording] to [working-towards wording]."
+- "Cut the generic opener; start with the [specific CV item] experience."
+- "Tighten [section] by [N] words by removing [repetitive/generic content]."
+- "Move the [X paragraph] earlier to front-load c[N] evidence."
+- "Replace the generic 'I'm committed to continuing to develop' with a concrete reference to [a skill already mentioned in the CV]."
+- "Anchor the [X] claim to the specific [employer/system/qualification] already in the CV."
+
+Self-check before emitting each fix: can this be applied by reading only the existing statement and the CV? If no, REPLACE it with a SOFTEN or REMOVE fix instead, or omit it.
+
 - Always set requiresUserInput to false.
 
 Rules:

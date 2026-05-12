@@ -1302,6 +1302,9 @@ function GenerateStep({
     setReviewStartedAt(Date.now());
     setReviewError(null);
     setReview(null);
+    // Fresh review = fresh history. Otherwise the previous run's history
+    // lingers and the "+N improvement" badge points at a stale baseline.
+    setScoreHistory([]);
     try {
       const res = await fetch("/api/review-statement", {
         method: "POST",
@@ -2016,8 +2019,13 @@ function ReviewCard({
   const scoreImproved =
     previousScore !== null && review.overallScore > previousScore;
   const fixCount = review.topFixes.length;
+  // Once auto-improve has run (scoreHistory has more than just the initial
+  // entry), don't offer it again on the same review — the loop already
+  // tried and stopped. The user needs to manually edit or re-score before
+  // a fresh attempt makes sense.
+  const hasRunAutoImprove = scoreHistory.length > 1;
   const canAutoImprove =
-    review.overallScore < 95 && fixCount > 0 && !improving;
+    review.overallScore < 95 && fixCount > 0 && !improving && !hasRunAutoImprove;
 
   const lowScoring = review.criterionScores.filter((c) => c.score < 2);
   const highScoring = review.criterionScores.filter((c) => c.score >= 2);
@@ -2133,7 +2141,11 @@ function ReviewCard({
         </details>
       )}
 
-      {fixCount > 0 && (
+      {/* Only show the fixes list BEFORE auto-improve has run. Once the
+          loop has either applied them or stopped because it couldn't
+          improve further, the remaining fixes aren't actionable from this
+          screen — the user needs to edit manually or re-score first. */}
+      {fixCount > 0 && !hasRunAutoImprove && (
         <details className="rounded-lg border border-[var(--color-border)] bg-white group">
           <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
             <span>
