@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser, badRequest, serverError } from "@/lib/api";
 import { callClaudeJson } from "@/lib/anthropic-json";
+import { REVIEW_MODEL } from "@/lib/anthropic";
 import {
   REVIEW_STATEMENT_SYSTEM,
   buildReviewUser,
@@ -33,20 +34,30 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Only send essential criteria to Claude (we don't score desirable
+    // anyway, and they bloat the input).
+    const essentialOnly = {
+      jobTitle: body.personSpec.jobTitle,
+      band: body.personSpec.band,
+      organisation: body.personSpec.organisation,
+      criteria: (
+        body.personSpec.criteria as Array<{ type?: string }>
+      ).filter((c) => c.type === "essential"),
+    };
+
     const review = await callClaudeJson<ReviewResult>({
+      model: REVIEW_MODEL,
       system: REVIEW_STATEMENT_SYSTEM,
       user: buildReviewUser({
-        personSpecJson: JSON.stringify(body.personSpec, null, 2),
+        personSpecJson: JSON.stringify(essentialOnly),
         statementText: body.statementText,
         jobTitle: body.personSpec.jobTitle,
         band: body.personSpec.band,
         organisation: body.personSpec.organisation,
       }),
-      // Person specs with 10+ essential criteria + 5 topFixes can produce
-      // 3.5k+ tokens of JSON. 4096 was hitting max_tokens cutoffs which
-      // surfaced as "Review failed" to the user.
-      maxTokens: 8192,
-      temperature: 0.3,
+      // Tight output caps in the prompt keep this comfortably under 4096.
+      maxTokens: 4096,
+      temperature: 0.2,
     });
 
     if (

@@ -12,13 +12,14 @@ export async function callClaudeJson<T>(opts: {
   user: string;
   maxTokens?: number;
   temperature?: number;
+  model?: string;
 }): Promise<T> {
   const client = getAnthropic();
 
   let response: Anthropic.Message;
   try {
     response = await client.messages.create({
-      model: MODEL,
+      model: opts.model ?? MODEL,
       max_tokens: opts.maxTokens ?? 4096,
       temperature: opts.temperature,
       system: opts.system,
