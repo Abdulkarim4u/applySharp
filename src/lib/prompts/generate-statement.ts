@@ -78,6 +78,18 @@ STRUCTURE:
 
 LENGTH: 800-1200 words by default. Never exceed 1500.
 
+HANDLING UNFILLED STAR ANSWERS:
+
+The applicant may skip the STAR questions or leave them as AI-drafted skeletons. You will recognise these unfilled cases by:
+- Empty answers
+- Answers containing [bracketed prompts] like "[describe one specific shift]" or "[the concrete actions you took]"
+
+When an answer is unfilled for a criterion:
+- DO NOT include the [bracketed text] in your output. It is a placeholder, not real content.
+- DO NOT invent specific incidents, dates, patient names, or outcomes that aren't in the CV or the answers.
+- INSTEAD, write a thoughtful general claim for that criterion using only facts already present in the CV (employer name, role, duration, systems, qualifications, training mentioned). For example: "Working on the acute medical ward at Manchester Royal I follow Trust safeguarding policy and escalate concerns to the nurse in charge" — no fabricated incident, but anchored to real CV facts.
+- The applicant will iterate after seeing the shortlister review, so an unfilled criterion is genuinely OK on the first pass. Focus on what you CAN say truthfully from the CV rather than padding with invented stories.
+
 Return ONLY the supporting statement text. No preamble, no commentary, no markdown code fences, no headings labelled "Introduction" or "Conclusion".`;
 
 export function buildGenerateStatementUser(input: {

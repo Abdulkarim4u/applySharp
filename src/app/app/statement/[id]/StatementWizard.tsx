@@ -1041,21 +1041,31 @@ function GapFillStep({
   onContinue: () => void;
   onBack: () => void;
 }) {
-  const answeredCount = gapFills.filter((g) => g.answer.trim().length > 0).length;
+  // Count answers that the user has actually filled in (not the AI draft, not
+  // bracketed placeholders left as-is).
+  const personalisedCount = gapFills.filter((g) => {
+    const trimmed = g.answer.trim();
+    if (trimmed.length === 0) return false;
+    if (g.draftAnswer && trimmed === g.draftAnswer.trim()) return false;
+    return true;
+  }).length;
   const total = gapFills.length;
 
   return (
     <StepShell
-      title="Fill the gaps with your stories"
-      description="These are the criteria where your CV is thin. Answer each with one specific story — a real shift, patient interaction, project, or moment. Two or three sentences is plenty."
+      title="Optional — add personal stories for a stronger first version"
+      description="Your CV alone will produce a good statement. Adding 1-2 specific stories below makes it exceptional. You can also skip this step entirely and add details later for whatever criteria score low."
       back={
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
       }
       primary={
-        <Button onClick={onContinue} size="lg" disabled={answeredCount === 0}>
-          Generate statement <ArrowRight className="h-4 w-4" />
+        <Button onClick={onContinue} size="lg">
+          {personalisedCount > 0
+            ? `Generate with my ${personalisedCount} ${personalisedCount === 1 ? "story" : "stories"}`
+            : "Generate from my CV"}{" "}
+          <ArrowRight className="h-4 w-4" />
         </Button>
       }
     >
@@ -1066,17 +1076,43 @@ function GapFillStep({
         </div>
       ) : (
         <>
-          <div className="rounded-md bg-[var(--color-brand-soft)] border border-[var(--color-brand)] p-4 mb-5">
-            <p className="text-sm font-medium text-[var(--color-brand)]">
-              ✨ We&apos;ve drafted starter answers for you
+          <div className="rounded-md border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-5 mb-5">
+            <p className="font-semibold text-[var(--color-brand)]">
+              Recommended: skip and generate now
             </p>
-            <p className="text-xs text-[var(--color-brand)] mt-1 leading-relaxed">
-              Each answer is pre-filled with a skeleton anchored to your CV.
-              Just replace the [bracketed prompts] with your real specifics
-              (it usually takes 2 minutes per question). Or click{" "}
-              <strong>Clear</strong> to write from scratch.
+            <p className="text-sm text-[var(--color-brand)] mt-1.5 leading-relaxed">
+              The AI will write the strongest statement it can from your CV.
+              You&apos;ll get a score in about 30 seconds. If anything scores
+              low, the next step will ask you for just those specific details
+              (usually 1-2 questions, not 5). Most users finish in 3-5 minutes
+              total this way.
             </p>
+            <Button
+              onClick={onContinue}
+              size="lg"
+              className="mt-4"
+            >
+              <Sparkles className="h-4 w-4" />
+              Skip and generate now
+            </Button>
           </div>
+
+          <details className="mb-5 rounded-md border border-[var(--color-border)] bg-white">
+            <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors">
+              Or fill in personal stories for the strongest first version
+              <span className="text-[var(--color-muted)] font-normal ml-1">
+                (~10 minutes, optional)
+              </span>
+            </summary>
+            <div className="border-t border-[var(--color-border)] p-4">
+              <p className="text-xs text-[var(--color-muted)] leading-relaxed">
+                Each answer is pre-filled with a skeleton anchored to your CV.
+                Replace the [bracketed prompts] with your real specifics. Skip
+                any you don&apos;t want to answer — empty answers just produce
+                general statements that you can refine later.
+              </p>
+            </div>
+          </details>
           <ul className="space-y-6">
             {gapFills.map((g, i) => {
               const hasBrackets = /\[[^\]]+\]/.test(g.answer);
@@ -1150,9 +1186,9 @@ function GapFillStep({
 
       {gapFills.length > 0 && (
         <p className="mt-5 text-xs text-[var(--color-muted-soft)]">
-          {answeredCount === 0
-            ? `Answer at least one to continue. Longer, more specific answers produce a stronger statement.`
-            : `${answeredCount} of ${total} answered. You can leave some blank, but answering more produces a stronger statement.`}
+          {personalisedCount === 0
+            ? `All ${total} answers are still AI drafts with [brackets]. The AI will treat those as unfilled and write general statements for those criteria. Add your specifics for stronger output.`
+            : `${personalisedCount} of ${total} personalised. The rest will be general statements drawn from your CV.`}
         </p>
       )}
     </StepShell>
