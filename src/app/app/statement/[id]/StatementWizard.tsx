@@ -2210,6 +2210,52 @@ function ReviewCard({
           )}
         </div>
       )}
+
+      {/* Set realistic expectations. Once the AI has done its work the user
+          will hit a ceiling that needs their own input to break through. */}
+      {review.overallScore < 95 && (
+        <details className="rounded-lg border border-[var(--color-border)] bg-white group">
+          <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
+            <span>How to reach a top score</span>
+            <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
+          </summary>
+          <div className="border-t border-[var(--color-border)] p-4 space-y-3 text-sm text-[var(--color-muted)] leading-relaxed">
+            <p>
+              Auto-improve handles rewriting, restructuring and tightening.
+              Some criteria need real facts only you can provide — without
+              them the score will plateau.
+            </p>
+            <ul className="space-y-2 pl-4 list-disc">
+              <li>
+                <span className="text-[var(--color-fg)] font-medium">
+                  Answer the one-line questions above
+                </span>{" "}
+                with real dates, numbers or yes/no — each typed answer can
+                lift one criterion from 2/3 to 3/3.
+              </li>
+              <li>
+                <span className="text-[var(--color-fg)] font-medium">
+                  Add personal stories at step 4
+                </span>{" "}
+                (use Back). A specific situation, action and outcome for
+                each weak criterion is the biggest single lift.
+              </li>
+              <li>
+                <span className="text-[var(--color-fg)] font-medium">
+                  Strengthen your CV before regenerating
+                </span>{" "}
+                — add missing qualifications, training dates, system names
+                or numbers the spec asks for.
+              </li>
+            </ul>
+            <p className="text-xs text-[var(--color-muted-soft)]">
+              100/100 is rare by design. The scorer is calibrated to a real
+              NHS panel — a strong, fully-evidenced statement typically
+              scores 92–96.
+            </p>
+          </div>
+        </details>
+      )}
     </div>
   );
 }
