@@ -1531,19 +1531,29 @@ function GenerateStep({
     setImproveError(null);
     setScoreHistory([review.overallScore]);
 
-    // Track the BEST version we've seen, not the latest. The improve+re-score
-    // cycle can degrade a statement (later rounds over-edit and lose evidence
-    // that earlier rounds were scoring on). We only commit to UI state when
-    // we beat the best so far, and we always end with the best version
-    // visible — never a regression.
+    // Track the BEST version we've seen. We always end with bestText/
+    // bestReview reflected in the UI — never a regression. But within
+    // a run we accept "lateral" candidates (score within 2 of best) as
+    // the starting point for the next round, to give a chance at finding
+    // a genuine improvement later in the loop.
+    const REGRESSION_TOLERANCE = 2;
     let bestReview = review;
     let bestText = text;
+    let currentReview = review;
+    let currentText = text;
+    let stopReason: "target" | "no-fixes" | "regression" | "max" = "max";
 
     try {
       for (let i = 0; i < MAX_ITERATIONS; i++) {
-        if (bestReview.overallScore >= TARGET_SCORE) break;
-        const fixes = bestReview.topFixes;
-        if (fixes.length === 0) break;
+        if (bestReview.overallScore >= TARGET_SCORE) {
+          stopReason = "target";
+          break;
+        }
+        const fixes = currentReview.topFixes;
+        if (fixes.length === 0) {
+          stopReason = "no-fixes";
+          break;
+        }
 
         setImproveStage(
           `Round ${i + 1} of ${MAX_ITERATIONS} · applying ${fixes.length} fix${fixes.length === 1 ? "" : "es"}…`,
@@ -1553,7 +1563,7 @@ function GenerateStep({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             statementId: statement.id,
-            currentStatement: bestText,
+            currentStatement: currentText,
             fixes,
             jobTitle: statement.person_spec.jobTitle,
             organisation: statement.person_spec.organisation,
@@ -1581,24 +1591,53 @@ function GenerateStep({
         const candidateReview = reviewData.review as ReviewResult;
 
         if (candidateReview.overallScore > bestReview.overallScore) {
-          // Improved. Commit and record in history.
+          // Strict improvement. Promote candidate to new best, show in UI,
+          // record in history.
           bestReview = candidateReview;
           bestText = candidateText;
+          currentReview = candidateReview;
+          currentText = candidateText;
           setText(candidateText);
           setReview(candidateReview);
           setScoreHistory((h) => [...h, candidateReview.overallScore]);
+        } else if (
+          candidateReview.overallScore >=
+          bestReview.overallScore - REGRESSION_TOLERANCE
+        ) {
+          // Lateral move (tie or tiny dip). Don't beat best, but try
+          // next round from the candidate's state — it may unlock a
+          // different fix path that the original wouldn't have surfaced.
+          currentReview = candidateReview;
+          currentText = candidateText;
         } else {
-          // Regression or no improvement. Keep the best and stop. Don't
-          // record the regression in history; the user shouldn't see
-          // "Score: 88 → 78" when we kept the 88 version.
+          // Real regression. Keep best and stop.
+          stopReason = "regression";
           break;
         }
       }
 
+      // Always end with the best version on screen. If the last accepted
+      // candidate was a lateral and we never beat best, snap UI back.
+      if (text !== bestText) {
+        setText(bestText);
+        setReview(bestReview);
+      }
+
       // The improve API saves every candidate text to the DB, including
-      // regressions. Overwrite with the best version so the DB matches the UI.
-      if (bestText !== text) {
+      // regressions and laterals. Overwrite with the best version so the
+      // DB matches the UI.
+      if (bestText !== statement.final_text) {
         onTextUpdate(bestText);
+      }
+
+      // Tell the user what happened when score didn't budge — otherwise
+      // it looks like the loop did nothing.
+      if (bestReview.overallScore === review.overallScore) {
+        setImproveError(
+          stopReason === "regression"
+            ? "Auto-improve tried 3 rounds but every change scored lower. Statement kept as-is."
+            : "Auto-improve tried but couldn't push the score higher. The statement is already in good shape for the criteria the AI can address.",
+        );
       }
 
       // Scroll the statement back to the top so user can see the changes
