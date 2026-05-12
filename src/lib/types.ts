@@ -22,6 +22,10 @@ export interface GapFillQuestion {
   criterionText: string;
   question: string;
   hint: string;
+  /** A STARR-structured starter skeleton anchored to the applicant's CV.
+   *  Specific details the AI can't know are marked as [bracketed prompts] —
+   *  the user replaces those with their real experience. */
+  draftAnswer?: string;
 }
 
 export interface GapFillAnswer {

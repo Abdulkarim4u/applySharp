@@ -1011,6 +1011,7 @@ interface GapFillAnswerWithMeta extends GapFillAnswer {
   criterionText?: string;
   question?: string;
   hint?: string;
+  draftAnswer?: string;
 }
 
 function seededWithMeta(
@@ -1019,9 +1020,13 @@ function seededWithMeta(
 ): GapFillAnswerWithMeta[] {
   return seeded.map((s, i) => ({
     ...s,
+    // Pre-fill the answer with the AI-drafted skeleton when available.
+    // User can edit the brackets or clear and write from scratch.
+    answer: questions[i]?.draftAnswer ?? s.answer,
     criterionText: questions[i]?.criterionText,
     question: questions[i]?.question,
     hint: questions[i]?.hint,
+    draftAnswer: questions[i]?.draftAnswer,
   }));
 }
 
@@ -1060,38 +1065,87 @@ function GapFillStep({
           straight to generating.
         </div>
       ) : (
-        <ul className="space-y-6">
-          {gapFills.map((g, i) => (
-            <li key={g.criterionId} className="space-y-2.5">
-              <div>
-                <p className="text-xs font-medium text-[var(--color-brand)] uppercase tracking-wider">
-                  Question {i + 1} of {total}
-                </p>
-                <p className="font-medium mt-1.5">{g.criterionText}</p>
-                {g.question && (
-                  <p className="text-sm text-[var(--color-muted)] mt-2 leading-relaxed">
-                    {g.question}
-                  </p>
-                )}
-                {g.hint && (
-                  <p className="text-xs text-[var(--color-muted-soft)] mt-2 leading-relaxed">
-                    💡 {g.hint}
-                  </p>
-                )}
-              </div>
-              <Textarea
-                value={g.answer}
-                onChange={(e) => {
-                  const next = gapFills.slice();
-                  next[i] = { ...g, answer: e.target.value };
-                  onChange(next);
-                }}
-                placeholder="Tell us about a specific time…"
-                rows={4}
-              />
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="rounded-md bg-[var(--color-brand-soft)] border border-[var(--color-brand)] p-4 mb-5">
+            <p className="text-sm font-medium text-[var(--color-brand)]">
+              ✨ We&apos;ve drafted starter answers for you
+            </p>
+            <p className="text-xs text-[var(--color-brand)] mt-1 leading-relaxed">
+              Each answer is pre-filled with a skeleton anchored to your CV.
+              Just replace the [bracketed prompts] with your real specifics
+              (it usually takes 2 minutes per question). Or click{" "}
+              <strong>Clear</strong> to write from scratch.
+            </p>
+          </div>
+          <ul className="space-y-6">
+            {gapFills.map((g, i) => {
+              const hasBrackets = /\[[^\]]+\]/.test(g.answer);
+              const isDraftStillIntact =
+                g.draftAnswer && g.answer === g.draftAnswer;
+              return (
+                <li key={g.criterionId} className="space-y-2.5">
+                  <div>
+                    <p className="text-xs font-medium text-[var(--color-brand)] uppercase tracking-wider">
+                      Question {i + 1} of {total}
+                    </p>
+                    <p className="font-medium mt-1.5">{g.criterionText}</p>
+                    {g.question && (
+                      <p className="text-sm text-[var(--color-muted)] mt-2 leading-relaxed">
+                        {g.question}
+                      </p>
+                    )}
+                    {g.hint && (
+                      <p className="text-xs text-[var(--color-muted-soft)] mt-2 leading-relaxed">
+                        💡 {g.hint}
+                      </p>
+                    )}
+                  </div>
+                  <Textarea
+                    value={g.answer}
+                    onChange={(e) => {
+                      const next = gapFills.slice();
+                      next[i] = { ...g, answer: e.target.value };
+                      onChange(next);
+                    }}
+                    placeholder="Tell us about a specific time…"
+                    rows={5}
+                  />
+                  <div className="flex items-center justify-between gap-3 text-xs flex-wrap">
+                    {hasBrackets ? (
+                      <span className="text-amber-700">
+                        ⚠ Replace the [bracketed parts] with your real details
+                      </span>
+                    ) : g.answer.trim().length > 0 ? (
+                      <span className="text-[var(--color-brand)]">
+                        ✓ Answered
+                      </span>
+                    ) : (
+                      <span className="text-[var(--color-muted-soft)]">
+                        Empty — skipped
+                      </span>
+                    )}
+                    {g.draftAnswer && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = gapFills.slice();
+                          next[i] = {
+                            ...g,
+                            answer: isDraftStillIntact ? "" : (g.draftAnswer ?? ""),
+                          };
+                          onChange(next);
+                        }}
+                        className="text-[var(--color-muted)] hover:text-[var(--color-fg)] underline"
+                      >
+                        {isDraftStillIntact ? "Clear and write from scratch" : "Reset to AI draft"}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       {gapFills.length > 0 && (
