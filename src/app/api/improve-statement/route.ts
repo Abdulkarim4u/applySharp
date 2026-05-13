@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser, badRequest, serverError } from "@/lib/api";
 import { getAnthropic, MODEL } from "@/lib/anthropic";
 import { cleanStatementText } from "@/lib/clean-statement";
+import { logUsage } from "@/lib/anthropic-json";
 import {
   IMPROVE_STATEMENT_SYSTEM,
   buildImproveUser,
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
         },
       ],
     });
+    logUsage("improve-cached", MODEL, response.usage);
 
     const block = response.content.find((b) => b.type === "text");
     if (!block || block.type !== "text") {

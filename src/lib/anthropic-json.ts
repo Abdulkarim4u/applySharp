@@ -1,6 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAnthropic, MODEL } from "./anthropic";
 
+/** Logs usage to stdout so cache hits are visible in Vercel logs.
+ *  Format: usage[label] in=<input> out=<output> cache_write=<n> cache_read=<n>
+ *  A "cache_read > 0" line proves caching is paying for itself. */
+function logUsage(label: string, model: string, usage: Anthropic.Usage) {
+  const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const cacheWrite = usage.cache_creation_input_tokens ?? 0;
+  console.log(
+    `usage[${label}] model=${model} in=${usage.input_tokens} out=${usage.output_tokens} cache_write=${cacheWrite} cache_read=${cacheRead}`,
+  );
+}
+export { logUsage };
+
 /**
  * Calls Claude with a system + user prompt and parses the response as JSON.
  * Strips optional ```json fences before parsing. Throws descriptive errors
@@ -48,14 +60,16 @@ export async function callClaudeJson<T>(opts: {
     : opts.user;
 
   let response: Anthropic.Message;
+  const usedModel = opts.model ?? MODEL;
   try {
     response = await client.messages.create({
-      model: opts.model ?? MODEL,
+      model: usedModel,
       max_tokens: opts.maxTokens ?? 4096,
       temperature: opts.temperature,
       system: systemParam,
       messages: [{ role: "user", content: userContent }],
     });
+    logUsage(opts.cacheSystem ? "json-cached" : "json", usedModel, response.usage);
   } catch (e) {
     if (e instanceof Anthropic.APIError) {
       throw new Error(

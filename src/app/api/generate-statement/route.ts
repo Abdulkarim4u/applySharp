@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser, badRequest } from "@/lib/api";
 import { getAnthropic, MODEL } from "@/lib/anthropic";
 import { cleanStatementText } from "@/lib/clean-statement";
+import { logUsage } from "@/lib/anthropic-json";
 import {
   GENERATE_STATEMENT_SYSTEM,
   buildGenerateStatementUser,
@@ -100,6 +101,16 @@ export async function POST(req: NextRequest) {
             fullText += chunk;
             controller.enqueue(encoder.encode(chunk));
           }
+        }
+
+        // Once the stream ends, log final usage (input tokens shown only
+        // after the model finishes — streaming reports them with the
+        // terminal message_stop event).
+        try {
+          const final = await stream.finalMessage();
+          logUsage("generate", MODEL, final.usage);
+        } catch {
+          // best-effort; don't fail the response if usage isn't available
         }
 
         // Strip AI tells (markdown, em-dashes, semicolons) before saving so the
