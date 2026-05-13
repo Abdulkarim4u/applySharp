@@ -2311,9 +2311,9 @@ function ReviewCard({
               </li>
             </ul>
             <p className="text-xs text-[var(--color-muted-soft)]">
-              100/100 is rare by design. The scorer is calibrated to a real
-              NHS panel — a strong, fully-evidenced statement typically
-              scores 92–96.
+              A well-written statement typically scores 90-95. Above 95 means
+              every essential has a concrete situation and outcome. 100 is
+              reserved for outstanding statements.
             </p>
           </div>
         </details>
