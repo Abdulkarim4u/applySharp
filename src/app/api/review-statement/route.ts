@@ -3,10 +3,7 @@ import { z } from "zod";
 import { requireUser, badRequest, serverError } from "@/lib/api";
 import { callClaudeJson } from "@/lib/anthropic-json";
 import { REVIEW_MODEL } from "@/lib/anthropic";
-import {
-  REVIEW_STATEMENT_SYSTEM,
-  buildReviewUser,
-} from "@/lib/prompts/review-statement";
+import { REVIEW_STATEMENT_SYSTEM } from "@/lib/prompts/review-statement";
 import type { ReviewResult } from "@/lib/types";
 
 const Body = z.object({
@@ -45,17 +42,31 @@ export async function POST(req: NextRequest) {
       ).filter((c) => c.type === "essential"),
     };
 
+    // Split the user message into a CACHED prefix (job header + person
+    // spec, identical across every auto-improve round) and a tail (the
+    // statement text, which changes every round). The first review pays
+    // the cache write surcharge; subsequent reviews in the same loop
+    // read the prefix at ~10% the input-token cost.
+    const userPrefix = `Score this NHS supporting statement.
+
+Job: ${body.personSpec.jobTitle}${body.personSpec.band ? ` (Band ${body.personSpec.band})` : ""}${body.personSpec.organisation ? ` at ${body.personSpec.organisation}` : ""}
+
+Person spec:
+${JSON.stringify(essentialOnly)}`;
+
+    const userTail = `
+
+Statement:
+${body.statementText}
+
+Return JSON only.`;
+
     const review = await callClaudeJson<ReviewResult>({
       model: REVIEW_MODEL,
       system: REVIEW_STATEMENT_SYSTEM,
-      user: buildReviewUser({
-        personSpecJson: JSON.stringify(essentialOnly),
-        statementText: body.statementText,
-        jobTitle: body.personSpec.jobTitle,
-        band: body.personSpec.band,
-        organisation: body.personSpec.organisation,
-      }),
-      // Tight output caps in the prompt keep this comfortably under 4096.
+      cacheSystem: true,
+      cachedUserPrefix: userPrefix,
+      user: userTail,
       maxTokens: 4096,
       temperature: 0.2,
     });

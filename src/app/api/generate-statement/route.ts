@@ -65,16 +65,10 @@ export async function POST(req: NextRequest) {
   const stream = await anthropic.messages.stream({
     model: MODEL,
     max_tokens: 4096,
-    // Cache the (~2k token) static system prompt. If the user regenerates
-    // from the same wizard within 5 minutes, the second call pays 10%
-    // of input-token cost on the cached portion.
-    system: [
-      {
-        type: "text",
-        text: GENERATE_STATEMENT_SYSTEM,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
+    // No prompt caching here: this endpoint is called once per wizard
+    // session. Caching has a 25% write surcharge that only pays off when
+    // the same prompt is reused 2+ times within 5 minutes.
+    system: GENERATE_STATEMENT_SYSTEM,
     messages: [
       {
         role: "user",

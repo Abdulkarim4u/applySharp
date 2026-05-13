@@ -221,37 +221,16 @@ export function StatementWizard({ initial }: { initial: StatementRecord }) {
       {step === 2 && (
         <CvStep
           initialValue={s.cv_text ?? ""}
-          busy={busy === "gap"}
-          busyStartedAt={busy === "gap" ? busyStartedAt : null}
+          busy={false}
+          busyStartedAt={null}
           onContinue={async (text) => {
-            startBusy("gap");
             setError(null);
-            try {
-              await persist({ cv_text: text });
-              if (!s.person_spec) throw new Error("Missing criteria");
-              const res = await fetch("/api/gap-analysis", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ personSpec: s.person_spec, cv: text }),
-              });
-              if (!res.ok) {
-                const j = await res.json().catch(() => ({}));
-                throw new Error(j.error ?? "Gap analysis failed");
-              }
-              const { questions } = await res.json();
-              const seeded: GapFillAnswer[] = (questions as GapFillQuestion[]).map(
-                (q) => ({ criterionId: q.criterionId, answer: "" }),
-              );
-              await persist({
-                gap_fills: seededWithMeta(questions, seeded),
-              });
-              goto(3);
-              router.refresh();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Gap analysis failed");
-            } finally {
-              endBusy();
-            }
+            // Defer gap-analysis until the user actually expands the
+            // optional disclosure on step 3. Most users skip it now, and
+            // running the analysis up-front wastes ~$0.045 per session in
+            // tokens that produce drafts the user never reads.
+            await persist({ cv_text: text });
+            goto(3);
           }}
           onBack={() => setStep(1)}
         />
@@ -259,7 +238,42 @@ export function StatementWizard({ initial }: { initial: StatementRecord }) {
 
       {step === 3 && (
         <GapFillStep
-          gapFills={(s.gap_fills as GapFillAnswerWithMeta[] | null) ?? []}
+          gapFills={s.gap_fills as GapFillAnswerWithMeta[] | null}
+          loadingGaps={busy === "gap"}
+          onLoadGaps={async () => {
+            if (!s.person_spec || !s.cv_text) {
+              setError("Missing CV or criteria");
+              return;
+            }
+            startBusy("gap");
+            setError(null);
+            try {
+              const res = await fetch("/api/gap-analysis", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  personSpec: s.person_spec,
+                  cv: s.cv_text,
+                }),
+              });
+              if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error ?? "Gap analysis failed");
+              }
+              const { questions } = await res.json();
+              const seeded: GapFillAnswer[] = (
+                questions as GapFillQuestion[]
+              ).map((q) => ({ criterionId: q.criterionId, answer: "" }));
+              await persist({
+                gap_fills: seededWithMeta(questions, seeded),
+              });
+              router.refresh();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Gap analysis failed");
+            } finally {
+              endBusy();
+            }
+          }}
           onChange={(fills) => persist({ gap_fills: fills })}
           onContinue={() => goto(4)}
           onBack={() => setStep(2)}
@@ -1034,24 +1048,43 @@ function seededWithMeta(
 
 function GapFillStep({
   gapFills,
+  loadingGaps,
+  onLoadGaps,
   onChange,
   onContinue,
   onBack,
 }: {
-  gapFills: GapFillAnswerWithMeta[];
+  /** null = gap-analysis has not been run yet (default — lazy path).
+   *  [] = ran and found no gaps. [n] = ran with questions. */
+  gapFills: GapFillAnswerWithMeta[] | null;
+  loadingGaps: boolean;
+  onLoadGaps: () => Promise<void>;
   onChange: (next: GapFillAnswerWithMeta[]) => void;
   onContinue: () => void;
   onBack: () => void;
 }) {
+  const hasRun = gapFills !== null;
+  const list = gapFills ?? [];
+  const total = list.length;
   // Count answers that the user has actually filled in (not the AI draft, not
   // bracketed placeholders left as-is).
-  const personalisedCount = gapFills.filter((g) => {
+  const personalisedCount = list.filter((g) => {
     const trimmed = g.answer.trim();
     if (trimmed.length === 0) return false;
     if (g.draftAnswer && trimmed === g.draftAnswer.trim()) return false;
     return true;
   }).length;
-  const total = gapFills.length;
+
+  // Fire gap-analysis the first time the user opens the disclosure.
+  // Skip if it's already run (regardless of whether there are questions).
+  const onDisclosureToggle: React.ReactEventHandler<HTMLDetailsElement> = (
+    e,
+  ) => {
+    const open = (e.target as HTMLDetailsElement).open;
+    if (open && !hasRun && !loadingGaps) {
+      void onLoadGaps();
+    }
+  };
 
   return (
     <StepShell
@@ -1070,7 +1103,7 @@ function GapFillStep({
         </Button>
       }
     >
-      {gapFills.length === 0 ? (
+      {hasRun && list.length === 0 ? (
         <div className="rounded-md bg-[var(--color-brand-soft)] p-4 text-sm">
           Your CV already evidences every criterion strongly. You can move
           straight to generating.
@@ -1089,6 +1122,7 @@ function GapFillStep({
           <details
             className="rounded-md border border-[var(--color-border)] bg-white group"
             open={personalisedCount > 0}
+            onToggle={onDisclosureToggle}
           >
             <summary className="cursor-pointer p-4 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors list-none flex items-center justify-between gap-3">
               <span>
@@ -1100,12 +1134,27 @@ function GapFillStep({
               <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180 flex-shrink-0" />
             </summary>
             <div className="border-t border-[var(--color-border)] p-4">
-              <p className="text-xs text-[var(--color-muted)] leading-relaxed mb-5">
-                Each answer is pre-filled from your CV. Replace the
-                [bracketed parts] with your specifics.
-              </p>
+              {loadingGaps && (
+                <div className="flex items-center gap-2 text-sm text-[var(--color-muted)] py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-[var(--color-brand)]" />
+                  Reading your CV and drafting personalised questions…
+                </div>
+              )}
+              {!loadingGaps && !hasRun && (
+                <p className="text-sm text-[var(--color-muted)] py-2">
+                  Click again to start. We&apos;ll generate one question per
+                  thin criterion.
+                </p>
+              )}
+              {!loadingGaps && hasRun && list.length > 0 && (
+                <p className="text-xs text-[var(--color-muted)] leading-relaxed mb-5">
+                  Each answer is pre-filled from your CV. Replace the
+                  [bracketed parts] with your specifics.
+                </p>
+              )}
+              {!loadingGaps && hasRun && list.length > 0 && (
               <ul className="space-y-6">
-                {gapFills.map((g, i) => {
+                {list.map((g, i) => {
                   const hasBrackets = /\[[^\]]+\]/.test(g.answer);
                   const isDraftStillIntact =
                     g.draftAnswer && g.answer === g.draftAnswer;
@@ -1130,7 +1179,7 @@ function GapFillStep({
                       <Textarea
                         value={g.answer}
                         onChange={(e) => {
-                          const next = gapFills.slice();
+                          const next = list.slice();
                           next[i] = { ...g, answer: e.target.value };
                           onChange(next);
                         }}
@@ -1155,7 +1204,7 @@ function GapFillStep({
                           <button
                             type="button"
                             onClick={() => {
-                              const next = gapFills.slice();
+                              const next = list.slice();
                               next[i] = {
                                 ...g,
                                 answer: isDraftStillIntact
@@ -1174,6 +1223,7 @@ function GapFillStep({
                   );
                 })}
               </ul>
+              )}
             </div>
           </details>
         </>
