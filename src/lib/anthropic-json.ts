@@ -22,7 +22,18 @@ export async function callClaudeJson<T>(opts: {
       model: opts.model ?? MODEL,
       max_tokens: opts.maxTokens ?? 4096,
       temperature: opts.temperature,
-      system: opts.system,
+      // System prompts are static per-route and identical across every
+      // call. Marking with cache_control: ephemeral makes Anthropic
+      // cache the prompt prefix for 5 minutes — subsequent calls in the
+      // same auto-improve round (or by a different user) pay 10% of the
+      // input-token cost instead of 100%.
+      system: [
+        {
+          type: "text",
+          text: opts.system,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       messages: [{ role: "user", content: opts.user }],
     });
   } catch (e) {

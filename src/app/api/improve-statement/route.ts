@@ -57,7 +57,16 @@ export async function POST(req: NextRequest) {
       // Slightly lower temperature than fresh generation — we want surgical
       // edits, not creative rewrites.
       temperature: 0.5,
-      system: IMPROVE_STATEMENT_SYSTEM,
+      // Cache the static improve system prompt. Auto-improve loops call
+      // this 2-3 times in quick succession; subsequent calls within
+      // 5 minutes pay 10% of input-token cost.
+      system: [
+        {
+          type: "text",
+          text: IMPROVE_STATEMENT_SYSTEM,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       messages: [
         {
           role: "user",
