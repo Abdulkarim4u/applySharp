@@ -35,6 +35,13 @@ export interface GapFillAnswer {
 
 export type StatementStatus = "draft" | "in_progress" | "completed";
 
+export type ApplicationStatus =
+  | "not_submitted"
+  | "submitted"
+  | "interview"
+  | "offer"
+  | "rejected";
+
 export type ShortlistDecision = "shortlist" | "borderline" | "reject";
 
 export interface CriterionScore {
@@ -81,6 +88,8 @@ export interface StatementRecord {
   step: number;
   last_score: number | null;
   last_decision: ShortlistDecision | null;
+  application_status: ApplicationStatus;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
 }

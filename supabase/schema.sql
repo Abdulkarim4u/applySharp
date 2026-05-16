@@ -25,6 +25,9 @@ create table if not exists public.statements (
   step int not null default 0,
   last_score int,
   last_decision text check (last_decision in ('shortlist', 'borderline', 'reject')),
+  application_status text default 'not_submitted'
+    check (application_status in ('not_submitted', 'submitted', 'interview', 'offer', 'rejected')),
+  submitted_at timestamptz,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
@@ -33,6 +36,10 @@ create table if not exists public.statements (
 alter table public.statements add column if not exists last_score int;
 alter table public.statements add column if not exists last_decision text
   check (last_decision in ('shortlist', 'borderline', 'reject'));
+alter table public.statements add column if not exists application_status text
+  default 'not_submitted'
+  check (application_status in ('not_submitted', 'submitted', 'interview', 'offer', 'rejected'));
+alter table public.statements add column if not exists submitted_at timestamptz;
 
 create index if not exists statements_user_id_idx on public.statements(user_id);
 create index if not exists statements_updated_at_idx on public.statements(updated_at desc);

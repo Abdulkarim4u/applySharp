@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     supabase
       .from("statements")
       .select(
-        "id, title, sector, status, step, person_spec, last_score, last_decision, updated_at",
+        "id, title, sector, status, step, person_spec, last_score, last_decision, application_status, submitted_at, updated_at",
       )
       .order("updated_at", { ascending: false }),
     supabase.auth.getClaims(),
@@ -36,6 +36,18 @@ export default async function DashboardPage() {
   );
 
   const completedCount = list.filter((s) => s.status === "completed").length;
+  const submittedCount = list.filter(
+    (s) =>
+      s.application_status === "submitted" ||
+      s.application_status === "interview" ||
+      s.application_status === "offer",
+  ).length;
+  const interviewCount = list.filter(
+    (s) => s.application_status === "interview" || s.application_status === "offer",
+  ).length;
+  const offerCount = list.filter(
+    (s) => s.application_status === "offer",
+  ).length;
   const bestScore = list.reduce<number | null>((acc, s) => {
     if (typeof s.last_score !== "number") return acc;
     if (acc === null) return s.last_score;
@@ -76,6 +88,38 @@ export default async function DashboardPage() {
                   {completedCount}
                 </span>{" "}
                 completed
+              </span>
+            </>
+          )}
+          {submittedCount > 0 && (
+            <>
+              <span className="text-[var(--color-muted-soft)]">·</span>
+              <span>
+                <span className="font-medium text-[var(--color-fg)] tabular-nums">
+                  {submittedCount}
+                </span>{" "}
+                submitted
+              </span>
+            </>
+          )}
+          {interviewCount > 0 && (
+            <>
+              <span className="text-[var(--color-muted-soft)]">·</span>
+              <span>
+                <span className="font-medium text-[var(--color-fg)] tabular-nums">
+                  {interviewCount}
+                </span>{" "}
+                interview{interviewCount === 1 ? "" : "s"}
+              </span>
+            </>
+          )}
+          {offerCount > 0 && (
+            <>
+              <span className="text-[var(--color-muted-soft)]">·</span>
+              <span className="inline-flex items-center gap-1.5 text-[var(--color-brand)] font-medium">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="tabular-nums">{offerCount}</span>{" "}
+                offer{offerCount === 1 ? "" : "s"}
               </span>
             </>
           )}
@@ -122,7 +166,10 @@ export default async function DashboardPage() {
                       </p>
                     )}
                     <div className="mt-1.5 flex items-center gap-x-2 gap-y-1 text-sm text-[var(--color-muted)] flex-wrap">
-                      <StatusBadge status={s.status} />
+                      <StatusBadge
+                        wizardStatus={s.status}
+                        applicationStatus={s.application_status}
+                      />
                       {typeof s.last_score === "number" && (
                         <ScoreChip
                           score={s.last_score}
@@ -130,7 +177,9 @@ export default async function DashboardPage() {
                         />
                       )}
                       <span className="truncate">
-                        {formatRelative(s.updated_at)}
+                        {s.application_status === "submitted" && s.submitted_at
+                          ? `Applied ${formatRelative(s.submitted_at)}`
+                          : formatRelative(s.updated_at)}
                       </span>
                     </div>
                   </div>
@@ -167,7 +216,17 @@ function EmptyState() {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+/** Shows whichever badge is most informative: in-flight writing status while
+ *  the wizard isn't done, then application outcome status (Submitted /
+ *  Interview / Offer / Rejected) once the user marks progress. Completed
+ *  but not_submitted stays as "Completed" so it nudges the user to mark it. */
+function StatusBadge({
+  wizardStatus,
+  applicationStatus,
+}: {
+  wizardStatus: string;
+  applicationStatus: string | null;
+}) {
   const map: Record<string, { label: string; className: string }> = {
     draft: {
       label: "Draft",
@@ -181,8 +240,30 @@ function StatusBadge({ status }: { status: string }) {
       label: "Completed",
       className: "bg-[var(--color-brand-soft)] text-[var(--color-brand)]",
     },
+    submitted: {
+      label: "Submitted",
+      className: "bg-blue-50 text-blue-800",
+    },
+    interview: {
+      label: "Interview",
+      className: "bg-amber-50 text-amber-800",
+    },
+    offer: {
+      label: "Offer",
+      className: "bg-[var(--color-brand-soft)] text-[var(--color-brand)]",
+    },
+    rejected: {
+      label: "Rejected",
+      className: "bg-red-50 text-red-700",
+    },
   };
-  const v = map[status] ?? map.draft;
+  const key =
+    wizardStatus === "completed" &&
+    applicationStatus &&
+    applicationStatus !== "not_submitted"
+      ? applicationStatus
+      : wizardStatus;
+  const v = map[key] ?? map.draft;
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${v.className}`}

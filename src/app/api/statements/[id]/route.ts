@@ -34,6 +34,9 @@ const PatchBody = z.object({
   step: z.number().int().min(0).max(10).optional(),
   last_score: z.number().int().min(0).max(100).nullable().optional(),
   last_decision: z.enum(["shortlist", "borderline", "reject"]).nullable().optional(),
+  application_status: z
+    .enum(["not_submitted", "submitted", "interview", "offer", "rejected"])
+    .optional(),
 });
 
 export async function PATCH(
@@ -51,9 +54,25 @@ export async function PATCH(
   }
 
   const { id } = await params;
+
+  // When the user marks a statement as submitted for the first time, stamp
+  // submitted_at server-side so we can show "Applied X days ago" reminders.
+  // Server is the source of truth — don't trust client-sent timestamps.
+  const updates: Record<string, unknown> = { ...body };
+  if (body.application_status === "submitted") {
+    const { data: existing } = await auth.supabase
+      .from("statements")
+      .select("submitted_at")
+      .eq("id", id)
+      .single();
+    if (!existing?.submitted_at) {
+      updates.submitted_at = new Date().toISOString();
+    }
+  }
+
   const { data, error } = await auth.supabase
     .from("statements")
-    .update(body)
+    .update(updates)
     .eq("id", id)
     .select()
     .single();

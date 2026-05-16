@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   Copy,
   Download,
+  FilePlus,
   Loader2,
   Pencil,
   RefreshCw,
@@ -18,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScoreChip, decisionLabel } from "@/components/score-chip";
 import { cleanStatementText } from "@/lib/clean-statement";
 import type {
+  ApplicationStatus,
   ReviewFix,
   ReviewResult,
   ShortlistDecision,
@@ -25,6 +29,39 @@ import type {
 } from "@/lib/types";
 
 type ConfirmKind = "review" | "improve" | null;
+
+const APPLICATION_STATUS_OPTIONS: {
+  value: ApplicationStatus;
+  label: string;
+  tone: string;
+}[] = [
+  {
+    value: "not_submitted",
+    label: "Not submitted",
+    tone: "bg-slate-100 text-slate-700 border-slate-200",
+  },
+  {
+    value: "submitted",
+    label: "Submitted",
+    tone: "bg-blue-50 text-blue-800 border-blue-200",
+  },
+  {
+    value: "interview",
+    label: "Interview",
+    tone: "bg-amber-50 text-amber-800 border-amber-200",
+  },
+  {
+    value: "offer",
+    label: "Offer",
+    tone:
+      "bg-[var(--color-brand-soft)] text-[var(--color-brand)] border-[var(--color-brand)]/30",
+  },
+  {
+    value: "rejected",
+    label: "Rejected",
+    tone: "bg-red-50 text-red-700 border-red-200",
+  },
+];
 
 export function DocumentView({ initial }: { initial: StatementRecord }) {
   const [statement, setStatement] = useState<StatementRecord>(initial);
@@ -46,6 +83,12 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
 
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+
+  const [duplicating, setDuplicating] = useState(false);
+  const router = useRouter();
+
   const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
 
   useEffect(() => {
@@ -61,6 +104,74 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [downloadMenuOpen]);
+
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        statusMenuRef.current &&
+        !statusMenuRef.current.contains(e.target as Node)
+      ) {
+        setStatusMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [statusMenuOpen]);
+
+  async function updateApplicationStatus(next: ApplicationStatus) {
+    setStatusMenuOpen(false);
+    if (next === statement.application_status) return;
+    const prev = statement;
+    // Optimistic — feels instant. Server stamps submitted_at when needed.
+    setStatement((s) => ({
+      ...s,
+      application_status: next,
+      submitted_at:
+        next === "submitted" && !s.submitted_at
+          ? new Date().toISOString()
+          : s.submitted_at,
+    }));
+    try {
+      const res = await fetch(`/api/statements/${statement.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_status: next }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      const { statement: saved } = await res.json();
+      // Sync any server-stamped fields (submitted_at) back into local state.
+      setStatement((s) => ({
+        ...s,
+        application_status: saved.application_status,
+        submitted_at: saved.submitted_at,
+      }));
+    } catch {
+      setStatement(prev);
+      setError("Couldn't update status. Try again.");
+    }
+  }
+
+  async function duplicateStatement() {
+    if (duplicating) return;
+    setDuplicating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/statements/duplicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId: statement.id }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.id) {
+        throw new Error(data?.error ?? "Could not duplicate");
+      }
+      router.push(`/app/statement/${data.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not duplicate");
+      setDuplicating(false);
+    }
+  }
 
   const persistTitle = useCallback(
     async (nextTitle: string) => {
@@ -421,7 +532,7 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
 
       <TitleEditor title={statement.title} onSave={persistTitle} />
 
-      <div className="mt-3 flex items-center gap-3 flex-wrap">
+      <div className="mt-3 flex items-center gap-x-3 gap-y-2 flex-wrap">
         {typeof score === "number" ? (
           <>
             <ScoreChip score={score} decision={decision} size="lg" />
@@ -436,6 +547,20 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
             Not scored yet
           </span>
         )}
+        <span
+          aria-hidden
+          className="hidden sm:inline text-[var(--color-muted-soft)]"
+        >
+          ·
+        </span>
+        <StatusSelector
+          status={statement.application_status}
+          submittedAt={statement.submitted_at}
+          open={statusMenuOpen}
+          onToggle={() => setStatusMenuOpen((o) => !o)}
+          onSelect={updateApplicationStatus}
+          containerRef={statusMenuRef}
+        />
       </div>
 
       {verdict && (
@@ -443,6 +568,11 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
           “{verdict}”
         </p>
       )}
+
+      <FollowUpHint
+        status={statement.application_status}
+        submittedAt={statement.submitted_at}
+      />
 
       {error && (
         <div className="mt-4 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
@@ -560,23 +690,42 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
             </>
           ) : (
             <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setEditBuffer(text);
-                  setEditing(true);
-                }}
-                disabled={busy}
-              >
-                <Pencil className="h-4 w-4" /> Edit content
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditBuffer(text);
+                    setEditing(true);
+                  }}
+                  disabled={busy || duplicating}
+                >
+                  <Pencil className="h-4 w-4" /> Edit content
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={duplicateStatement}
+                  disabled={busy || duplicating}
+                  title="Reuse this CV for another Trust or role"
+                >
+                  {duplicating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Copying…
+                    </>
+                  ) : (
+                    <>
+                      <FilePlus className="h-4 w-4" /> Duplicate
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => setConfirmKind("review")}
-                  disabled={busy}
+                  disabled={busy || duplicating}
                   title="Re-score this statement against the person spec"
                 >
                   {reviewing ? (
@@ -592,7 +741,7 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
                 <Button
                   size="sm"
                   onClick={() => setConfirmKind("improve")}
-                  disabled={busy}
+                  disabled={busy || duplicating}
                   title="Apply AI fixes until the score reaches 95+"
                 >
                   {improving ? (
@@ -719,4 +868,110 @@ function TitleEditor({
 
 function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function StatusSelector({
+  status,
+  submittedAt,
+  open,
+  onToggle,
+  onSelect,
+  containerRef,
+}: {
+  status: ApplicationStatus;
+  submittedAt: string | null;
+  open: boolean;
+  onToggle: () => void;
+  onSelect: (next: ApplicationStatus) => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const current =
+    APPLICATION_STATUS_OPTIONS.find((o) => o.value === status) ??
+    APPLICATION_STATUS_OPTIONS[0];
+
+  const submittedNote =
+    status === "submitted" && submittedAt
+      ? `Applied ${formatRelativeShort(submittedAt)}`
+      : null;
+
+  return (
+    <div ref={containerRef} className="relative inline-flex items-center gap-2">
+      <button
+        onClick={onToggle}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${current.tone} hover:opacity-90`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Update application status"
+      >
+        {current.label}
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {submittedNote && (
+        <span className="hidden sm:inline text-xs text-[var(--color-muted-soft)]">
+          {submittedNote}
+        </span>
+      )}
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full mt-1 z-20 w-44 rounded-md border border-[var(--color-border)] bg-white shadow-lg overflow-hidden"
+        >
+          {APPLICATION_STATUS_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              role="menuitem"
+              onClick={() => onSelect(opt.value)}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-surface)] flex items-center justify-between gap-2 ${
+                opt.value === status ? "font-medium" : ""
+              }`}
+            >
+              <span>{opt.label}</span>
+              {opt.value === status && (
+                <Check className="h-3.5 w-3.5 text-[var(--color-brand)]" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FollowUpHint({
+  status,
+  submittedAt,
+}: {
+  status: ApplicationStatus;
+  submittedAt: string | null;
+}) {
+  // Lazy state initializer runs once on mount — keeps Date.now() out of render
+  // body (react-hooks/purity). The value is stable for the page lifetime,
+  // which is fine: nobody sits on this page for 24 hours.
+  const [now] = useState(() => Date.now());
+  if (status !== "submitted" || !submittedAt) return null;
+  const days = Math.floor(
+    (now - new Date(submittedAt).getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (days < 14) return null;
+  return (
+    <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+      Applied {days} days ago — consider following up with the recruitment team.
+    </div>
+  );
+}
+
+function formatRelativeShort(iso: string): string {
+  const now = typeof window === "undefined" ? new Date(iso).getTime() : Date.now();
+  const diff = now - new Date(iso).getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days < 1) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
 }
