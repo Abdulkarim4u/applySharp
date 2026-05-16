@@ -28,23 +28,34 @@ export async function POST(req: NextRequest) {
     return badRequest(e instanceof Error ? e.message : "Invalid input");
   }
 
-  const { data: source, error: sourceErr } = await auth.supabase
-    .from("statements")
-    .select("cv_text, sector")
-    .eq("id", body.sourceId)
-    .single();
+  // Pull source and profile in parallel — profile fallback covers the edge
+  // case where the source predates the CV being saved on the statement.
+  const [sourceRes, profileRes] = await Promise.all([
+    auth.supabase
+      .from("statements")
+      .select("cv_text, sector")
+      .eq("id", body.sourceId)
+      .single(),
+    auth.supabase
+      .from("profiles")
+      .select("cv_text")
+      .eq("id", auth.user.id)
+      .maybeSingle(),
+  ]);
 
-  if (sourceErr || !source) {
+  if (sourceRes.error || !sourceRes.data) {
     return NextResponse.json({ error: "Source not found" }, { status: 404 });
   }
+
+  const cvText = sourceRes.data.cv_text ?? profileRes.data?.cv_text ?? null;
 
   const { data: created, error: insertErr } = await auth.supabase
     .from("statements")
     .insert({
       user_id: auth.user.id,
       title: "Untitled statement",
-      sector: source.sector,
-      cv_text: source.cv_text,
+      sector: sourceRes.data.sector,
+      cv_text: cvText,
       status: "draft",
       step: 0,
     })

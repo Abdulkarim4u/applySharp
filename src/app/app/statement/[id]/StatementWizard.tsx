@@ -16,6 +16,7 @@ import {
   Trash2,
   Plus,
   Copy,
+  Check,
   CheckCircle2,
   Sparkles,
   AlertCircle,
@@ -57,7 +58,13 @@ type Updates = Partial<
   >
 >;
 
-export function StatementWizard({ initial }: { initial: StatementRecord }) {
+export function StatementWizard({
+  initial,
+  profileCvText,
+}: {
+  initial: StatementRecord;
+  profileCvText: string | null;
+}) {
   const router = useRouter();
   const [s, setS] = useState<StatementRecord>(initial);
   const [step, setStep] = useState<number>(initial.step ?? 0);
@@ -221,15 +228,26 @@ export function StatementWizard({ initial }: { initial: StatementRecord }) {
       {step === 2 && (
         <CvStep
           initialValue={s.cv_text ?? ""}
+          profileCvText={profileCvText}
           busy={false}
           busyStartedAt={null}
-          onContinue={async (text) => {
+          onContinue={async (text, saveToProfile) => {
             setError(null);
+            await persist({ cv_text: text });
+            // First-paste seed: if the user has no saved CV yet, save this
+            // one to the profile so future statements skip the CV step.
+            // Best-effort — failure here doesn't block progress.
+            if (saveToProfile && !profileCvText && text.trim().length > 50) {
+              fetch("/api/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cv_text: text }),
+              }).catch(() => {});
+            }
             // Defer gap-analysis until the user actually expands the
             // optional disclosure on step 3. Most users skip it now, and
             // running the analysis up-front wastes ~$0.045 per session in
             // tokens that produce drafts the user never reads.
-            await persist({ cv_text: text });
             goto(3);
           }}
           onBack={() => setStep(1)}
@@ -894,20 +912,36 @@ function CriteriaStep({
 
 function CvStep({
   initialValue,
+  profileCvText,
   busy,
   busyStartedAt,
   onContinue,
   onBack,
 }: {
   initialValue: string;
+  profileCvText: string | null;
   busy: boolean;
   busyStartedAt: number | null;
-  onContinue: (text: string) => void;
+  onContinue: (text: string, saveToProfile: boolean) => void;
   onBack: () => void;
 }) {
   const [text, setText] = useState(initialValue);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  // First-time users: default ON. The user can untick before pressing
+  // Continue if they don't want this CV saved as their default.
+  const [saveAsDefault, setSaveAsDefault] = useState(true);
+
+  // The user has a saved CV AND the statement currently shows that exact
+  // CV. We treat this as "using your saved CV" and hide the paste UI behind
+  // an explicit override.
+  const usingSavedCv =
+    profileCvText !== null &&
+    text === profileCvText &&
+    profileCvText.trim().length > 0;
+  const [overriding, setOverriding] = useState(false);
+  const showEditor = !usingSavedCv || overriding;
+
   const wc = wordCount(text);
   const ok = text.trim().length > 50;
 
@@ -938,15 +972,23 @@ function CvStep({
 
   return (
     <StepShell
-      title="Paste your CV"
-      description="Work history, education, key responsibilities and achievements. Specifics help: dates, employer names, systems used, the kind of patients or clients you worked with."
+      title={usingSavedCv && !overriding ? "Your CV" : "Paste your CV"}
+      description={
+        usingSavedCv && !overriding
+          ? "We've pre-filled your saved CV. Continue, or use a different one just for this statement."
+          : "Work history, education, key responsibilities and achievements. Specifics help: dates, employer names, systems used, the kind of patients or clients you worked with."
+      }
       back={
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
       }
       primary={
-        <Button onClick={() => onContinue(text)} disabled={!ok || busy} size="lg">
+        <Button
+          onClick={() => onContinue(text, saveAsDefault)}
+          disabled={!ok || busy}
+          size="lg"
+        >
           {busy ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -960,64 +1002,135 @@ function CvStep({
         </Button>
       }
     >
-      <div className="mb-3 flex items-center gap-3 flex-wrap">
-        <label
-          className={cn(
-            "inline-flex items-center gap-2 rounded-md border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors",
-            parsing ? "cursor-wait opacity-60" : "cursor-pointer",
+      {usingSavedCv && !overriding ? (
+        <div className="rounded-lg border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)]/40 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <Check className="h-5 w-5 text-[var(--color-brand)] flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-[var(--color-fg)]">
+                Using your saved CV
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-muted)] tabular-nums">
+                {wc.toLocaleString("en-GB")} words
+              </p>
+              <div className="mt-3 flex items-center gap-3 flex-wrap text-sm">
+                <Link
+                  href="/app/profile"
+                  className="text-[var(--color-brand)] underline-offset-4 hover:underline"
+                >
+                  Edit my CV in profile
+                </Link>
+                <span className="text-[var(--color-muted-soft)]">·</span>
+                <button
+                  type="button"
+                  onClick={() => setOverriding(true)}
+                  className="text-[var(--color-fg)] hover:text-[var(--color-brand)] underline underline-offset-4"
+                >
+                  Use a different CV this time
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showEditor && (
+        <>
+          {usingSavedCv && overriding && (
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex items-center justify-between gap-2 flex-wrap">
+              <span>
+                Editing the CV for this statement only — your saved CV stays the same.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setText(profileCvText ?? "");
+                  setOverriding(false);
+                }}
+                className="underline underline-offset-2 hover:text-amber-700"
+              >
+                Use my saved CV instead
+              </button>
+            </div>
           )}
-        >
-          {parsing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+
+          <div className="mb-3 flex items-center gap-3 flex-wrap">
+            <label
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface)] transition-colors",
+                parsing ? "cursor-wait opacity-60" : "cursor-pointer",
+              )}
+            >
+              {parsing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              {parsing ? "Reading PDF…" : "Upload PDF"}
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="sr-only"
+                disabled={parsing}
+                onChange={(e) => {
+                  handleFile(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span className="text-sm text-[var(--color-muted)]">
+              or paste below
+            </span>
+          </div>
+
+          {parseError && (
+            <div className="mb-3 flex items-start gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>{parseError}</span>
+            </div>
+          )}
+
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Paste your full CV here, or upload it above."
+            rows={busy ? 8 : 18}
+            disabled={busy}
+            className="font-mono text-[13px] leading-relaxed"
+          />
+
+          {busy && busyStartedAt ? (
+            <div className="mt-3">
+              <StepProgressCard
+                stages={GAP_STAGES}
+                estimatedSeconds={12}
+                startedAt={busyStartedAt}
+              />
+            </div>
           ) : (
-            <Upload className="h-4 w-4" />
+            <div className="mt-2 flex items-start justify-between gap-3 flex-wrap">
+              <p className="text-xs text-[var(--color-muted-soft)]">
+                {wc === 0
+                  ? "PDF or copy-paste both work. We never share your CV."
+                  : `${wc.toLocaleString("en-GB")} words · ${ok ? "Ready" : "Add your work history and key responsibilities"}`}
+              </p>
+              {/* First-time-user nudge: offer to save this CV to profile.
+                  Hidden once they have a saved CV — Profile is the source
+                  of truth from then on. */}
+              {!profileCvText && ok && (
+                <label className="inline-flex items-center gap-2 text-xs text-[var(--color-muted)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={saveAsDefault}
+                    onChange={(e) => setSaveAsDefault(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--color-border-strong)]"
+                  />
+                  Save as my default CV
+                </label>
+              )}
+            </div>
           )}
-          {parsing ? "Reading PDF…" : "Upload PDF"}
-          <input
-            type="file"
-            accept=".pdf,application/pdf"
-            className="sr-only"
-            disabled={parsing}
-            onChange={(e) => {
-              handleFile(e.target.files?.[0]);
-              e.target.value = ""; // reset so re-uploading the same file works
-            }}
-          />
-        </label>
-        <span className="text-sm text-[var(--color-muted)]">
-          or paste below
-        </span>
-      </div>
-
-      {parseError && (
-        <div className="mb-3 flex items-start gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <span>{parseError}</span>
-        </div>
-      )}
-
-      <Textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Paste your full CV here, or upload it above."
-        rows={busy ? 8 : 18}
-        disabled={busy}
-        className="font-mono text-[13px] leading-relaxed"
-      />
-      {busy && busyStartedAt ? (
-        <div className="mt-3">
-          <StepProgressCard
-            stages={GAP_STAGES}
-            estimatedSeconds={12}
-            startedAt={busyStartedAt}
-          />
-        </div>
-      ) : (
-        <p className="mt-2 text-xs text-[var(--color-muted-soft)]">
-          {wc === 0
-            ? "PDF or copy-paste both work. We never share your CV."
-            : `${wc.toLocaleString("en-GB")} words · ${ok ? "Ready" : "Add your work history and key responsibilities"}`}
-        </p>
+        </>
       )}
     </StepShell>
   );

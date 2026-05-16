@@ -19,15 +19,15 @@ export default async function StatementPage({
 
   // No auth check here — the /app layout already gated and RLS protects
   // the row. One fewer network round-trip per navigation.
-  const { data: statement, error } = await supabase
-    .from("statements")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const [statementRes, profileRes] = await Promise.all([
+    supabase.from("statements").select("*").eq("id", id).single(),
+    supabase.from("profiles").select("cv_text, cv_updated_at").maybeSingle(),
+  ]);
 
-  if (error || !statement) notFound();
+  if (statementRes.error || !statementRes.data) notFound();
 
-  const record = statement as StatementRecord;
+  const record = statementRes.data as StatementRecord;
+  const profileCvText = profileRes.data?.cv_text ?? null;
 
   // Completed statements default to the read-only document view. This avoids
   // accidentally firing expensive Claude calls (Re-score, Auto-improve) from
@@ -38,5 +38,7 @@ export default async function StatementPage({
     return <DocumentView initial={record} />;
   }
 
-  return <StatementWizard initial={record} />;
+  return (
+    <StatementWizard initial={record} profileCvText={profileCvText} />
+  );
 }

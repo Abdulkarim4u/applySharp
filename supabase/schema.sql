@@ -5,9 +5,15 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   full_name text,
+  cv_text text,
+  cv_updated_at timestamptz,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
+
+-- Backfill for existing deployments (idempotent).
+alter table public.profiles add column if not exists cv_text text;
+alter table public.profiles add column if not exists cv_updated_at timestamptz;
 
 -- Statements (each application's supporting statement)
 create table if not exists public.statements (

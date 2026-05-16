@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "./ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 
 export function UserMenu({ email }: { email: string }) {
   const router = useRouter();
@@ -16,11 +17,22 @@ export function UserMenu({ email }: { email: string }) {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="hidden sm:inline text-sm text-[var(--color-muted)] truncate max-w-[180px]">
+    <div className="flex items-center gap-1 sm:gap-3">
+      <span className="hidden md:inline text-sm text-[var(--color-muted)] truncate max-w-[180px]">
         {email}
       </span>
-      <Button variant="ghost" size="sm" onClick={signOut}>
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        title="Your CV and profile"
+      >
+        <Link href="/app/profile">
+          <UserRound className="h-4 w-4" />
+          <span className="hidden sm:inline">Profile</span>
+        </Link>
+      </Button>
+      <Button variant="ghost" size="sm" onClick={signOut} title="Sign out">
         <LogOut className="h-4 w-4" />
         <span className="hidden sm:inline">Sign out</span>
       </Button>

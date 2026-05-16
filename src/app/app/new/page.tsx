@@ -11,6 +11,15 @@ export default async function NewStatementRedirectPage() {
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
 
+  // Read the user's saved CV (if any) so we can prefill the new statement.
+  // .maybeSingle() so a missing profile row doesn't error — the wizard
+  // handles an empty cv_text fine. Single small select, ~10ms.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("cv_text")
+    .eq("id", userId)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("statements")
     .insert({
@@ -19,6 +28,7 @@ export default async function NewStatementRedirectPage() {
       sector: "nhs",
       status: "draft",
       step: 0,
+      cv_text: profile?.cv_text ?? null,
     })
     .select("id")
     .single();

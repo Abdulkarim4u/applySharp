@@ -1,5 +1,15 @@
 export type Sector = "nhs";
 
+export interface Profile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  cv_text: string | null;
+  cv_updated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type CriterionType = "essential" | "desirable";
 export type CriterionCategory = "experience" | "skills" | "qualifications" | "values";
 
