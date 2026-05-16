@@ -107,69 +107,16 @@ export default async function DashboardPage() {
       </div>
 
       {list.length > 0 && (
-        <div className="mb-8 flex items-center gap-4 flex-wrap text-sm text-[var(--color-muted)]">
-          <span>
-            <span className="font-medium text-[var(--color-fg)] tabular-nums">
-              {list.length}
-            </span>{" "}
-            {list.length === 1 ? "statement" : "statements"}
-          </span>
-          {completedCount > 0 && (
-            <>
-              <span className="text-[var(--color-muted-soft)]">·</span>
-              <span>
-                <span className="font-medium text-[var(--color-fg)] tabular-nums">
-                  {completedCount}
-                </span>{" "}
-                completed
-              </span>
-            </>
-          )}
-          {submittedCount > 0 && (
-            <>
-              <span className="text-[var(--color-muted-soft)]">·</span>
-              <span>
-                <span className="font-medium text-[var(--color-fg)] tabular-nums">
-                  {submittedCount}
-                </span>{" "}
-                submitted
-              </span>
-            </>
-          )}
-          {interviewCount > 0 && (
-            <>
-              <span className="text-[var(--color-muted-soft)]">·</span>
-              <span>
-                <span className="font-medium text-[var(--color-fg)] tabular-nums">
-                  {interviewCount}
-                </span>{" "}
-                interview{interviewCount === 1 ? "" : "s"}
-              </span>
-            </>
-          )}
-          {offerCount > 0 && (
-            <>
-              <span className="text-[var(--color-muted-soft)]">·</span>
-              <span className="inline-flex items-center gap-1.5 text-[var(--color-brand)] font-medium">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="tabular-nums">{offerCount}</span>{" "}
-                offer{offerCount === 1 ? "" : "s"}
-              </span>
-            </>
-          )}
-          {bestScore !== null && (
-            <>
-              <span className="text-[var(--color-muted-soft)]">·</span>
-              <span className="inline-flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5 text-[var(--color-brand)]" />
-                Best score{" "}
-                <span className="font-medium text-[var(--color-fg)] tabular-nums">
-                  {bestScore}
-                </span>
-              </span>
-            </>
-          )}
-        </div>
+        <StatsRow
+          stats={buildStats({
+            count: list.length,
+            completed: completedCount,
+            submitted: submittedCount - interviewCount,
+            interviews: interviewCount - offerCount,
+            offers: offerCount,
+            bestScore,
+          })}
+        />
       )}
 
       {showCvBanner && <CvSeedBanner sourceTitle={seedSourceTitle} />}
@@ -343,6 +290,126 @@ function buildOrgLine(spec: PersonSpec | null): string | null {
   if (org) return org;
   if (band) return `Band ${band}`;
   return null;
+}
+
+type Stat = {
+  key: string;
+  value: number;
+  label: string;
+  highlight?: boolean;
+  icon?: "sparkles" | "trending";
+};
+
+function buildStats({
+  count,
+  completed,
+  submitted,
+  interviews,
+  offers,
+  bestScore,
+}: {
+  count: number;
+  completed: number;
+  submitted: number;
+  interviews: number;
+  offers: number;
+  bestScore: number | null;
+}): Stat[] {
+  const stats: Stat[] = [
+    {
+      key: "count",
+      value: count,
+      label: count === 1 ? "statement" : "statements",
+    },
+  ];
+  if (completed > 0) {
+    stats.push({ key: "completed", value: completed, label: "completed" });
+  }
+  if (submitted > 0) {
+    stats.push({ key: "submitted", value: submitted, label: "submitted" });
+  }
+  if (interviews > 0) {
+    stats.push({
+      key: "interviews",
+      value: interviews,
+      label: interviews === 1 ? "interview" : "interviews",
+    });
+  }
+  if (offers > 0) {
+    stats.push({
+      key: "offers",
+      value: offers,
+      label: offers === 1 ? "offer" : "offers",
+      highlight: true,
+      icon: "sparkles",
+    });
+  }
+  if (bestScore !== null) {
+    stats.push({
+      key: "score",
+      value: bestScore,
+      label: "Best score",
+      icon: "trending",
+    });
+  }
+  return stats;
+}
+
+/** Renders a horizontal stats row with separators ONLY between visible
+ *  items. Each (separator + stat) is grouped into one whitespace-nowrap
+ *  unit so a wrap can never strand a trailing dot. */
+function StatsRow({ stats }: { stats: Stat[] }) {
+  return (
+    <div className="mb-6 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-sm text-[var(--color-muted)]">
+      {stats.map((stat, i) => (
+        <span
+          key={stat.key}
+          className="inline-flex items-center gap-3 whitespace-nowrap"
+        >
+          {i > 0 && (
+            <span className="text-[var(--color-muted-soft)]" aria-hidden>
+              ·
+            </span>
+          )}
+          <span
+            className={
+              stat.highlight
+                ? "inline-flex items-center gap-1.5 text-[var(--color-brand)] font-medium"
+                : "inline-flex items-center gap-1.5"
+            }
+          >
+            {stat.icon === "sparkles" && (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {stat.icon === "trending" && (
+              <TrendingUp className="h-3.5 w-3.5 text-[var(--color-brand)]" />
+            )}
+            {stat.label === "Best score" ? (
+              <>
+                {stat.label}{" "}
+                <span className="font-medium text-[var(--color-fg)] tabular-nums">
+                  {stat.value}
+                </span>
+              </>
+            ) : (
+              <>
+                <span
+                  className={
+                    stat.highlight
+                      ? "tabular-nums"
+                      : "font-medium text-[var(--color-fg)] tabular-nums"
+                  }
+                >
+                  {stat.value}
+                </span>{" "}
+                {stat.label}
+              </>
+            )}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 /** "Up next: CV" — tells users what to do when they reopen a paused

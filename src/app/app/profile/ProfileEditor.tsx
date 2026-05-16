@@ -159,6 +159,43 @@ export function ProfileEditor({
         </div>
       )}
 
+      {/* Empty-profile fast path: when the user has a CV sitting in their
+          last statement, surface that BEFORE the editor so they don't waste
+          time pasting again. Disappears once they start typing. */}
+      {!profile.cv_text && lastStatementCv && mode === "edit" && !dirty && (
+        <section className="mt-6 rounded-lg border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)]/50 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex-shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-white text-[var(--color-brand)] shadow-sm">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-[var(--color-fg)]">
+                Use the CV from your last statement
+              </p>
+              <p className="mt-0.5 text-sm text-[var(--color-muted)] truncate">
+                From: {lastStatementCv.title}
+              </p>
+              <div className="mt-3">
+                <Button size="sm" onClick={importLastCv}>
+                  Import this CV
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!profile.cv_text && lastStatementCv && mode === "edit" && !dirty && (
+        <div
+          className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-[var(--color-muted-soft)]"
+          aria-hidden
+        >
+          <span className="flex-1 h-px bg-[var(--color-border)]" />
+          <span>Or start fresh</span>
+          <span className="flex-1 h-px bg-[var(--color-border)]" />
+        </div>
+      )}
+
       {mode === "view" && profile.cv_text ? (
         <ViewCard
           cvText={profile.cv_text}
@@ -195,28 +232,6 @@ export function ProfileEditor({
           }}
           onSave={() => save(draft)}
         />
-      )}
-
-      {/* Empty-state extras: surface the one-click import for existing
-          users who have a CV in their last statement but not in profile.
-          Hidden once profile.cv_text exists. */}
-      {!profile.cv_text && lastStatementCv && mode === "edit" && !dirty && (
-        <div className="mt-4 rounded-md border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)]/40 p-4">
-          <div className="flex items-start gap-3 flex-wrap">
-            <Sparkles className="h-4 w-4 text-[var(--color-brand)] flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">
-                Import the CV from your last statement
-              </p>
-              <p className="mt-0.5 text-xs text-[var(--color-muted)] truncate">
-                From: {lastStatementCv.title}
-              </p>
-            </div>
-            <Button size="sm" variant="secondary" onClick={importLastCv}>
-              Import
-            </Button>
-          </div>
-        </div>
       )}
 
       {/* Tips card — small, optional, hidden once there's a saved CV. */}
@@ -391,8 +406,8 @@ function EditCard({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Paste your full CV here — work history, education, qualifications, key responsibilities and achievements."
-          rows={18}
-          className="font-mono text-[13px] leading-relaxed"
+          rows={10}
+          className="font-mono text-[13px] leading-relaxed min-h-[260px] sm:min-h-[420px]"
         />
       </div>
       <div className="px-4 sm:px-6 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-between gap-2 flex-wrap">
@@ -416,6 +431,11 @@ function EditCard({
             size="sm"
             onClick={onSave}
             disabled={!valid || !dirty || saving}
+            // Disabled state needs to look clearly inert (not just a faded
+            // brand button) so users don't click and wonder why nothing
+            // happened. Override the global opacity-50 with explicit muted
+            // colours.
+            className="disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-100 disabled:shadow-none"
           >
             {saving ? (
               <>
