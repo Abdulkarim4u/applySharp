@@ -10,8 +10,9 @@ import {
 } from "lucide-react";
 import { NewStatementButton } from "./NewStatementButton";
 import { CvSeedBanner } from "./CvSeedBanner";
+import { QuickStatusAction } from "./QuickStatusAction";
 import { ScoreChip } from "@/components/score-chip";
-import type { PersonSpec } from "@/lib/types";
+import type { ApplicationStatus, PersonSpec } from "@/lib/types";
 
 const WIZARD_STEP_NAMES = ["Advert", "Criteria", "CV", "Stories", "Generate"];
 
@@ -128,17 +129,25 @@ export default async function DashboardPage() {
           {list.map((s) => {
             const spec = s.person_spec as PersonSpec | null;
             const orgLine = buildOrgLine(spec);
+            const appStatus = (s.application_status ??
+              "not_submitted") as ApplicationStatus;
             return (
               <li key={s.id}>
-                <Link
-                  href={`/app/statement/${s.id}`}
-                  prefetch
-                  className="flex items-center gap-3 sm:gap-4 rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-5 hover:border-[var(--color-brand)] hover:shadow-sm transition-all group"
-                >
-                  <span className="flex-shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)] group-hover:scale-105 transition-transform">
+                {/* Card is a div with an absolutely-positioned Link covering
+                    the click area, so the inline quick-action button can
+                    sit as a sibling and capture its own clicks without
+                    triggering navigation. */}
+                <div className="relative flex items-center gap-3 sm:gap-4 rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-5 hover:border-[var(--color-brand)] hover:shadow-sm transition-all group">
+                  <Link
+                    href={`/app/statement/${s.id}`}
+                    prefetch
+                    aria-label={s.title || "Untitled statement"}
+                    className="absolute inset-0 rounded-lg z-0"
+                  />
+                  <span className="relative pointer-events-none flex-shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)] group-hover:scale-105 transition-transform">
                     <FileText className="h-5 w-5" />
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div className="relative pointer-events-none min-w-0 flex-1">
                     <h3 className="font-medium truncate">
                       {s.title || "Untitled statement"}
                     </h3>
@@ -168,10 +177,20 @@ export default async function DashboardPage() {
                           ? `Applied ${formatRelative(s.submitted_at)}`
                           : formatRelative(s.updated_at)}
                       </span>
+                      {/* Quick-action sits inside the meta-row but is a
+                          z-stacked sibling of the Link, so its onClick
+                          doesn't navigate. */}
+                      <span className="relative z-10 pointer-events-auto">
+                        <QuickStatusAction
+                          statementId={s.id}
+                          currentStatus={appStatus}
+                          wizardStatus={s.status}
+                        />
+                      </span>
                     </div>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-[var(--color-muted-soft)] group-hover:text-[var(--color-brand)] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-                </Link>
+                  <ArrowRight className="relative pointer-events-none h-4 w-4 text-[var(--color-muted-soft)] group-hover:text-[var(--color-brand)] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                </div>
               </li>
             );
           })}

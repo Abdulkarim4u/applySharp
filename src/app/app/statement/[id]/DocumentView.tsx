@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
-  ChevronDown,
   Copy,
   Download,
   FilePlus,
@@ -83,9 +82,7 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
 
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const statusMenuRef = useRef<HTMLDivElement>(null);
-
+  const [statusSaving, setStatusSaving] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const router = useRouter();
 
@@ -105,24 +102,10 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [downloadMenuOpen]);
 
-  useEffect(() => {
-    if (!statusMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        statusMenuRef.current &&
-        !statusMenuRef.current.contains(e.target as Node)
-      ) {
-        setStatusMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [statusMenuOpen]);
-
   async function updateApplicationStatus(next: ApplicationStatus) {
-    setStatusMenuOpen(false);
     if (next === statement.application_status) return;
     const prev = statement;
+    setStatusSaving(true);
     // Optimistic — feels instant. Server stamps submitted_at when needed.
     setStatement((s) => ({
       ...s,
@@ -149,6 +132,8 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
     } catch {
       setStatement(prev);
       setError("Couldn't update status. Try again.");
+    } finally {
+      setStatusSaving(false);
     }
   }
 
@@ -547,20 +532,6 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
             Not scored yet
           </span>
         )}
-        <span
-          aria-hidden
-          className="hidden sm:inline text-[var(--color-muted-soft)]"
-        >
-          ·
-        </span>
-        <StatusSelector
-          status={statement.application_status}
-          submittedAt={statement.submitted_at}
-          open={statusMenuOpen}
-          onToggle={() => setStatusMenuOpen((o) => !o)}
-          onSelect={updateApplicationStatus}
-          containerRef={statusMenuRef}
-        />
       </div>
 
       {verdict && (
@@ -568,6 +539,25 @@ export function DocumentView({ initial }: { initial: StatementRecord }) {
           “{verdict}”
         </p>
       )}
+
+      <div className="mt-4 sm:mt-5">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-medium text-[var(--color-muted)] uppercase tracking-wide">
+            Application status
+          </span>
+          {statement.application_status === "submitted" &&
+            statement.submitted_at && (
+              <span className="text-xs text-[var(--color-muted-soft)]">
+                · Applied {formatRelativeShort(statement.submitted_at)}
+              </span>
+            )}
+        </div>
+        <StatusPills
+          status={statement.application_status}
+          onSelect={updateApplicationStatus}
+          saving={statusSaving}
+        />
+      </div>
 
       <FollowUpHint
         status={statement.application_status}
@@ -870,71 +860,46 @@ function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function StatusSelector({
+/** Visible toggle group for application status. All five options are
+ *  always on screen so there's no "where's the button" discoverability
+ *  problem. Current state is filled with its tone colour; others are a
+ *  neutral outlined pill. Tapping a non-current pill fires onSelect. */
+function StatusPills({
   status,
-  submittedAt,
-  open,
-  onToggle,
   onSelect,
-  containerRef,
+  saving,
 }: {
   status: ApplicationStatus;
-  submittedAt: string | null;
-  open: boolean;
-  onToggle: () => void;
   onSelect: (next: ApplicationStatus) => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  saving: boolean;
 }) {
-  const current =
-    APPLICATION_STATUS_OPTIONS.find((o) => o.value === status) ??
-    APPLICATION_STATUS_OPTIONS[0];
-
-  const submittedNote =
-    status === "submitted" && submittedAt
-      ? `Applied ${formatRelativeShort(submittedAt)}`
-      : null;
-
   return (
-    <div ref={containerRef} className="relative inline-flex items-center gap-2">
-      <button
-        onClick={onToggle}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${current.tone} hover:opacity-90`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Update application status"
-      >
-        {current.label}
-        <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {submittedNote && (
-        <span className="hidden sm:inline text-xs text-[var(--color-muted-soft)]">
-          {submittedNote}
-        </span>
-      )}
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-0 top-full mt-1 z-20 w-44 rounded-md border border-[var(--color-border)] bg-white shadow-lg overflow-hidden"
-        >
-          {APPLICATION_STATUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              role="menuitem"
-              onClick={() => onSelect(opt.value)}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-surface)] flex items-center justify-between gap-2 ${
-                opt.value === status ? "font-medium" : ""
-              }`}
-            >
-              <span>{opt.label}</span>
-              {opt.value === status && (
-                <Check className="h-3.5 w-3.5 text-[var(--color-brand)]" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+    <div
+      role="radiogroup"
+      aria-label="Application status"
+      className="flex flex-wrap gap-1.5"
+    >
+      {APPLICATION_STATUS_OPTIONS.map((opt) => {
+        const isCurrent = opt.value === status;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={isCurrent}
+            disabled={saving || isCurrent}
+            onClick={() => onSelect(opt.value)}
+            className={
+              isCurrent
+                ? `inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm cursor-default ${opt.tone}`
+                : "inline-flex items-center gap-1 rounded-full border border-[var(--color-border-strong)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:border-[var(--color-fg)] hover:text-[var(--color-fg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            }
+          >
+            {isCurrent && <Check className="h-3 w-3" />}
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
