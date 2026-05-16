@@ -10,11 +10,13 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
+  // getClaims() verifies the JWT locally instead of a network round-trip to
+  // Supabase Auth. Middleware already refreshed the session, so this is just
+  // a fast re-check. Saves ~100-200ms per navigation vs getUser().
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
+  if (!claims) redirect("/login");
+  const userEmail = (claims.email as string | undefined) ?? "";
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-surface)]">
@@ -31,7 +33,7 @@ export default async function AppLayout({
               </Link>
             </nav>
           </div>
-          <UserMenu email={user.email ?? ""} />
+          <UserMenu email={userEmail} />
         </div>
       </header>
 

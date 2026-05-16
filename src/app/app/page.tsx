@@ -1,28 +1,38 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { FileText, ArrowRight, Sparkles, TrendingUp } from "lucide-react";
+import {
+  FileText,
+  ArrowRight,
+  Sparkles,
+  TrendingUp,
+  Building2,
+} from "lucide-react";
 import { NewStatementButton } from "./NewStatementButton";
 import { ScoreChip } from "@/components/score-chip";
+import type { PersonSpec } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: statements }, { data: userData }] = await Promise.all([
+  // getClaims reads the cached JWT locally — no network round-trip.
+  // Layout already gated us, so claims are guaranteed here.
+  const [{ data: statements }, { data: claimsData }] = await Promise.all([
     supabase
       .from("statements")
       .select(
         "id, title, sector, status, step, person_spec, last_score, last_decision, updated_at",
       )
       .order("updated_at", { ascending: false }),
-    supabase.auth.getUser(),
+    supabase.auth.getClaims(),
   ]);
 
   const list = statements ?? [];
+  const claims = claimsData?.claims;
   const firstName = pickFirstName(
-    userData?.user?.user_metadata?.full_name as string | undefined,
-    userData?.user?.email,
+    claims?.user_metadata?.full_name as string | undefined,
+    claims?.email as string | undefined,
   );
 
   const completedCount = list.filter((s) => s.status === "completed").length;
@@ -88,39 +98,47 @@ export default async function DashboardPage() {
         <EmptyState />
       ) : (
         <ul className="space-y-3">
-          {list.map((s) => (
-            <li key={s.id}>
-              <Link
-                href={`/app/statement/${s.id}`}
-                className="flex items-center gap-3 sm:gap-4 rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-5 hover:border-[var(--color-brand)] hover:shadow-sm transition-all group"
-              >
-                <span className="flex-shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)] group-hover:scale-105 transition-transform">
-                  <FileText className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  {/* Title on its own line — truncates cleanly on any width */}
-                  <h3 className="font-medium truncate">
-                    {s.title || "Untitled statement"}
-                  </h3>
-                  {/* Meta line below: badges + date. Wraps gracefully when
-                      space runs out instead of fighting the title for width. */}
-                  <div className="mt-1 flex items-center gap-x-2 gap-y-1 text-sm text-[var(--color-muted)] flex-wrap">
-                    <StatusBadge status={s.status} />
-                    {typeof s.last_score === "number" && (
-                      <ScoreChip
-                        score={s.last_score}
-                        decision={s.last_decision}
-                      />
+          {list.map((s) => {
+            const spec = s.person_spec as PersonSpec | null;
+            const orgLine = buildOrgLine(spec);
+            return (
+              <li key={s.id}>
+                <Link
+                  href={`/app/statement/${s.id}`}
+                  prefetch
+                  className="flex items-center gap-3 sm:gap-4 rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-5 hover:border-[var(--color-brand)] hover:shadow-sm transition-all group"
+                >
+                  <span className="flex-shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)] group-hover:scale-105 transition-transform">
+                    <FileText className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium truncate">
+                      {s.title || "Untitled statement"}
+                    </h3>
+                    {orgLine && (
+                      <p className="mt-0.5 flex items-center gap-1.5 text-sm text-[var(--color-muted)] truncate">
+                        <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-muted-soft)]" />
+                        <span className="truncate">{orgLine}</span>
+                      </p>
                     )}
-                    <span className="truncate">
-                      {formatRelative(s.updated_at)}
-                    </span>
+                    <div className="mt-1.5 flex items-center gap-x-2 gap-y-1 text-sm text-[var(--color-muted)] flex-wrap">
+                      <StatusBadge status={s.status} />
+                      {typeof s.last_score === "number" && (
+                        <ScoreChip
+                          score={s.last_score}
+                          decision={s.last_decision}
+                        />
+                      )}
+                      <span className="truncate">
+                        {formatRelative(s.updated_at)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <ArrowRight className="h-4 w-4 text-[var(--color-muted-soft)] group-hover:text-[var(--color-brand)] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-              </Link>
-            </li>
-          ))}
+                  <ArrowRight className="h-4 w-4 text-[var(--color-muted-soft)] group-hover:text-[var(--color-brand)] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -192,6 +210,18 @@ function pickFirstName(fullName: string | undefined, email: string | undefined):
 function capitalise(s: string): string {
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+/** One-line subtitle for a statement card: "Band 3 at Doncaster NHS Trust",
+ *  "Doncaster NHS Trust", "Band 3", or null when neither field is set. */
+function buildOrgLine(spec: PersonSpec | null): string | null {
+  if (!spec) return null;
+  const org = spec.organisation?.trim();
+  const band = spec.band?.trim();
+  if (org && band) return `Band ${band} at ${org}`;
+  if (org) return org;
+  if (band) return `Band ${band}`;
+  return null;
 }
 
 function formatRelative(iso: string): string {

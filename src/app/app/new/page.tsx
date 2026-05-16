@@ -5,15 +5,16 @@ export const dynamic = "force-dynamic";
 
 export default async function NewStatementRedirectPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // Use getClaims for fast local JWT verify (no network round-trip).
+  // Middleware/layout already gated, this just gives us the user id.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) redirect("/login");
 
   const { data, error } = await supabase
     .from("statements")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       title: "Untitled statement",
       sector: "nhs",
       status: "draft",

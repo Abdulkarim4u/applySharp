@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatementWizard } from "./StatementWizard";
 import { DocumentView } from "./DocumentView";
@@ -17,11 +17,8 @@ export default async function StatementPage({
   const { edit } = await searchParams;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
+  // No auth check here — the /app layout already gated and RLS protects
+  // the row. One fewer network round-trip per navigation.
   const { data: statement, error } = await supabase
     .from("statements")
     .select("*")
