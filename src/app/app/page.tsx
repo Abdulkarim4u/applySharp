@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { FileText, ArrowRight, Sparkles, TrendingUp } from "lucide-react";
 import { NewStatementButton } from "./NewStatementButton";
+import { ScoreChip } from "@/components/score-chip";
 
 export const dynamic = "force-dynamic";
 
@@ -169,38 +170,6 @@ function StatusBadge({ status }: { status: string }) {
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${v.className}`}
     >
       {v.label}
-    </span>
-  );
-}
-
-function ScoreChip({
-  score,
-  decision,
-}: {
-  score: number;
-  decision: string | null;
-}) {
-  // Colour bands track the shortlister decision when we have it, otherwise
-  // fall back to the numeric score thresholds (matches the review prompt:
-  // shortlist >= 70, borderline 50-69, reject < 50).
-  const tone = decision
-    ? decision === "shortlist"
-      ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)] border-[var(--color-brand)]/30"
-      : decision === "borderline"
-        ? "bg-amber-50 text-amber-800 border-amber-200"
-        : "bg-red-50 text-red-700 border-red-200"
-    : score >= 70
-      ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)] border-[var(--color-brand)]/30"
-      : score >= 50
-        ? "bg-amber-50 text-amber-800 border-amber-200"
-        : "bg-red-50 text-red-700 border-red-200";
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${tone}`}
-      title={decision ? `Shortlister: ${decision} (${score}/100)` : `Score ${score}/100`}
-    >
-      {score}
     </span>
   );
 }
