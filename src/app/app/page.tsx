@@ -6,19 +6,29 @@ import {
   Sparkles,
   TrendingUp,
   Building2,
+  Footprints,
 } from "lucide-react";
 import { NewStatementButton } from "./NewStatementButton";
+import { CvSeedBanner } from "./CvSeedBanner";
 import { ScoreChip } from "@/components/score-chip";
 import type { PersonSpec } from "@/lib/types";
+
+const WIZARD_STEP_NAMES = ["Advert", "Criteria", "CV", "Stories", "Generate"];
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  // getClaims reads the cached JWT locally — no network round-trip.
-  // Layout already gated us, so claims are guaranteed here.
-  const [{ data: statements }, { data: claimsData }] = await Promise.all([
+  // All home-page data in parallel. getClaims reads JWT locally so it adds
+  // no latency. Profile + last-CV queries power the CV discoverability
+  // banner — they short-circuit if the user already has a saved CV.
+  const [
+    { data: statements },
+    { data: claimsData },
+    { data: profileRow },
+    { data: lastCvStmt },
+  ] = await Promise.all([
     supabase
       .from("statements")
       .select(
@@ -26,6 +36,14 @@ export default async function DashboardPage() {
       )
       .order("updated_at", { ascending: false }),
     supabase.auth.getClaims(),
+    supabase.from("profiles").select("cv_text").maybeSingle(),
+    supabase
+      .from("statements")
+      .select("title")
+      .not("cv_text", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const list = statements ?? [];
@@ -34,8 +52,13 @@ export default async function DashboardPage() {
     claims?.user_metadata?.full_name as string | undefined,
     claims?.email as string | undefined,
   );
+  const hasProfileCv = Boolean(profileRow?.cv_text);
+  const seedSourceTitle = lastCvStmt?.title ?? null;
 
   const completedCount = list.filter((s) => s.status === "completed").length;
+  const draftCount = list.filter(
+    (s) => s.status === "draft" || s.status === "in_progress",
+  ).length;
   const submittedCount = list.filter(
     (s) =>
       s.application_status === "submitted" ||
@@ -54,6 +77,21 @@ export default async function DashboardPage() {
     return Math.max(acc, s.last_score);
   }, null);
 
+  const welcomeSubtitle = buildWelcomeSubtitle({
+    count: list.length,
+    drafts: draftCount,
+    offers: offerCount,
+    interviews: interviewCount - offerCount,
+    submitted: submittedCount - interviewCount,
+    hasProfileCv,
+  });
+
+  // Show the CV banner when the user clearly hasn't discovered the profile
+  // feature: empty profile cv, but they've already pasted CVs into past
+  // statements. First-time users get the in-wizard "save as default" prompt
+  // instead — banner stays hidden so the home page stays calm.
+  const showCvBanner = !hasProfileCv && seedSourceTitle !== null;
+
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 py-8 sm:py-12">
       <div className="flex items-end justify-between gap-4 mb-2 flex-wrap">
@@ -63,11 +101,7 @@ export default async function DashboardPage() {
               ? `Welcome, ${firstName}`
               : `Welcome back, ${firstName}`}
           </h1>
-          <p className="mt-1 text-[var(--color-muted)]">
-            {list.length === 0
-              ? "Start your first NHS application below."
-              : "Pick up where you left off, or start a new application."}
-          </p>
+          <p className="mt-1 text-[var(--color-muted)]">{welcomeSubtitle}</p>
         </div>
         <NewStatementButton />
       </div>
@@ -138,6 +172,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      {showCvBanner && <CvSeedBanner sourceTitle={seedSourceTitle} />}
+
       {list.length === 0 ? (
         <EmptyState />
       ) : (
@@ -170,6 +206,10 @@ export default async function DashboardPage() {
                         wizardStatus={s.status}
                         applicationStatus={s.application_status}
                       />
+                      {(s.status === "draft" ||
+                        s.status === "in_progress") && (
+                        <DraftStepPill step={s.step ?? 0} />
+                      )}
                       {typeof s.last_score === "number" && (
                         <ScoreChip
                           score={s.last_score}
@@ -303,6 +343,64 @@ function buildOrgLine(spec: PersonSpec | null): string | null {
   if (org) return org;
   if (band) return `Band ${band}`;
   return null;
+}
+
+/** "Up next: CV" — tells users what to do when they reopen a paused
+ *  draft so they don't have to click in just to remember the state. */
+function DraftStepPill({ step }: { step: number }) {
+  const safe = Math.min(Math.max(step, 0), WIZARD_STEP_NAMES.length - 1);
+  const label = WIZARD_STEP_NAMES[safe];
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-[var(--color-muted)]">
+      <Footprints className="h-3.5 w-3.5 text-[var(--color-muted-soft)]" />
+      Up next: <span className="font-medium text-[var(--color-fg)]">{label}</span>
+    </span>
+  );
+}
+
+/** Adaptive welcome subtitle. The order matters: pick the most uplifting
+ *  state the user is in. Empty + no profile gets a setup nudge; everything
+ *  else reflects their actual progress. */
+function buildWelcomeSubtitle({
+  count,
+  drafts,
+  offers,
+  interviews,
+  submitted,
+  hasProfileCv,
+}: {
+  count: number;
+  drafts: number;
+  offers: number;
+  interviews: number;
+  submitted: number;
+  hasProfileCv: boolean;
+}): string {
+  if (count === 0 && !hasProfileCv) {
+    return "Let's set you up — start with your first statement or save your CV in profile.";
+  }
+  if (count === 0) {
+    return "Start your first NHS application below.";
+  }
+  if (offers > 0) {
+    return offers === 1
+      ? "Congrats on the offer. Keep the momentum going."
+      : `Congrats on ${offers} offers — keep the momentum going.`;
+  }
+  if (interviews > 0) {
+    return interviews === 1
+      ? "You have an interview on the way. Best of luck."
+      : `You have ${interviews} interviews on the way. Best of luck.`;
+  }
+  if (drafts > 0) {
+    return drafts === 1
+      ? "You have a draft in progress. Pick up where you left off."
+      : `You have ${drafts} drafts in progress. Pick up where you left off.`;
+  }
+  if (submitted > 0) {
+    return "Nice work. Track your applications below, or start the next one.";
+  }
+  return "Pick up where you left off, or start a new application.";
 }
 
 function formatRelative(iso: string): string {
