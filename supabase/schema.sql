@@ -59,9 +59,23 @@ drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
   for select using (auth.uid() = id);
 
+-- INSERT policy is required so the app's defensive upsert succeeds for
+-- legacy users whose row wasn't created by the on_auth_user_created trigger.
+-- Without this, upsert silently no-ops and the Profile page can crash.
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own" on public.profiles
+  for insert with check (auth.uid() = id);
+
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles
   for update using (auth.uid() = id);
+
+-- Backfill: ensure every existing auth user has a profile row. Idempotent.
+insert into public.profiles (id, email, full_name)
+select u.id, u.email, u.raw_user_meta_data->>'full_name'
+from auth.users u
+left join public.profiles p on p.id = u.id
+where p.id is null;
 
 -- Statements: full CRUD scoped to owner
 drop policy if exists "statements_select_own" on public.statements;
